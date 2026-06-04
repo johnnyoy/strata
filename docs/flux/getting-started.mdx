@@ -1,0 +1,184 @@
+---
+title: Flux Getting Started
+sidebar_label: Getting Started
+sidebar_position: 2
+tutorials:
+  - label: "Flux bootstrap guide"
+    url: https://fluxcd.io/flux/installation/bootstrap/github/
+  - label: "Flux CLI reference"
+    url: https://fluxcd.io/flux/cmd/
+---
+
+# Flux Getting Started
+
+<Level show="short">
+```bash
+# Install Flux CLI
+brew install fluxcd/tap/flux   # or https://fluxcd.io/flux/installation/
+
+# Check cluster prerequisites
+flux check --pre
+
+# Bootstrap (creates flux-system namespace + commits to your repo)
+flux bootstrap github \
+  --owner=my-org \
+  --repository=my-fleet \
+  --branch=main \
+  --path=clusters/production \
+  --personal
+
+# Check status
+flux get all
+```
+</Level>
+
+<Level show="medium">
+**Prerequisites**
+
+```bash
+flux check --pre   # checks K8s version, API groups, and CLI compatibility
+```
+
+Requires Kubernetes ≥ 1.26 and cluster-admin permissions during bootstrap.
+
+**Bootstrap with GitHub**
+
+```bash
+export GITHUB_TOKEN=ghp_xxx    # PAT with repo:write
+
+flux bootstrap github \
+  --owner=my-org \
+  --repository=my-fleet \
+  --branch=main \
+  --path=clusters/production \
+  --personal                    # omit for org repos
+```
+
+`flux bootstrap` is **idempotent** — safe to re-run after upgrades or failures. It creates a `flux-system` directory in your repo and commits Flux's own manifests there.
+
+**Checking reconciliation status**
+
+```bash
+flux get all                          # all Flux resources
+flux get sources git                  # Git source status
+flux get kustomizations               # Kustomization status
+flux get helmreleases -A              # HelmRelease status across namespaces
+```
+
+**Forcing a reconciliation**
+
+```bash
+flux reconcile source git flux-system        # pull latest from Git now
+flux reconcile kustomization apps            # apply immediately
+flux reconcile helmrelease my-release -n my-ns
+```
+
+**Suspending and resuming**
+
+Suspend to stop Flux applying a resource (e.g., during an incident):
+
+```bash
+flux suspend kustomization apps
+flux resume kustomization apps
+flux suspend helmrelease my-release -n my-ns
+```
+
+**Watching events**
+
+```bash
+flux events                          # recent Flux events
+flux events --watch                  # live stream
+flux events --for Kustomization/apps # for a specific resource
+```
+
+**Upgrading Flux**
+
+```bash
+flux check                           # compare installed vs CLI version
+flux bootstrap github ...            # re-run bootstrap with new CLI version
+```
+</Level>
+
+<Level show="long">
+**Repository structure patterns**
+
+Two common approaches:
+
+**Monorepo (one repo, one path per cluster):**
+```
+fleet/
+  clusters/
+    production/
+      flux-system/        # Flux bootstrap manifests (auto-generated)
+      apps.yaml           # Kustomization pointing to apps/
+      infrastructure.yaml # Kustomization pointing to infrastructure/
+    staging/
+      ...
+  apps/
+    base/
+      my-app/
+        deployment.yaml
+        service.yaml
+    production/
+      my-app/
+        kustomization.yaml   # overlays base with prod values
+  infrastructure/
+    base/
+      ingress-nginx/
+      cert-manager/
+    production/
+      ingress-nginx/
+```
+
+**Multi-repo (separate repos for infra and apps):**
+- `fleet` repo: cluster bootstrap + infrastructure Kustomizations
+- `apps` repo: application manifests, referenced by a `GitRepository` + `Kustomization` in the fleet repo
+- Teams own their app repos; Flux watches them all
+
+**Secrets management with Flux**
+
+Flux itself doesn't manage secrets — but it integrates with:
+- **SOPS**: encrypt secrets in Git; Flux decrypts at apply time using a KMS key or Age key:
+  ```yaml
+  spec:
+    decryption:
+      provider: sops
+      secretRef:
+        name: sops-age    # K8s secret holding the Age private key
+  ```
+- **External Secrets Operator**: pull secrets from Azure Key Vault, AWS Secrets Manager, etc., and create K8s Secrets automatically
+- **Sealed Secrets**: asymmetrically encrypted K8s Secrets safe to commit
+
+**Debugging reconciliation failures**
+
+```bash
+flux logs --follow --level=error               # Flux controller error logs
+kubectl get events -n flux-system              # K8s events in flux-system
+kubectl describe kustomization apps -n flux-system  # detailed status + message
+```
+
+Common failures:
+
+| Error | Cause |
+|-------|-------|
+| `context deadline exceeded` | Git unreachable, network issue |
+| `not allowed to perform this action` | RBAC — Flux SA lacks permission |
+| `Health check timeout` | Deployed resource not becoming Ready |
+| `artifact not found` | Source not reconciled yet; wait or force |
+
+**Flux with AKS**
+
+When bootstrapping on AKS with Workload Identity, store the GitHub token in Azure Key Vault and mount it via External Secrets, so the bootstrap secret rotates automatically. For the initial bootstrap, use a PAT; replace it immediately with Workload Identity-based auth for the SSH deploy key.
+
+```bash
+# Use SSH key instead of PAT (preferred for automation)
+flux bootstrap github \
+  --owner=my-org \
+  --repository=my-fleet \
+  --branch=main \
+  --path=clusters/production \
+  --ssh-key-algorithm=ecdsa
+```
+
+Flux creates an SSH deploy key in the repo; no personal token needed after bootstrap.
+</Level>

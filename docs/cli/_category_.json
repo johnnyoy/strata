@@ -1,0 +1,9 @@
+{
+  "label": "CLI Commands",
+  "position": 9,
+  "link": {
+    "type": "generated-index",
+    "slug": "/cli",
+    "description": "Essential command-line tools — grep, vim, htop, and the patterns that make them powerful."
+  }
+}

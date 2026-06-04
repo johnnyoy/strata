@@ -1,0 +1,188 @@
+---
+title: Linux File Operations
+sidebar_label: File Operations
+sidebar_position: 5
+tutorials:
+  - label: "find command examples"
+    url: https://www.tecmint.com/35-practical-examples-of-linux-find-command/
+  - label: "rsync tutorial"
+    url: https://www.digitalocean.com/community/tutorials/how-to-use-rsync-to-sync-local-and-remote-directories
+---
+
+# Linux File Operations
+
+<Level show="short">
+```bash
+find . -name "*.log"                  # find files by name
+find . -name "*.log" -mtime -7        # modified in last 7 days
+tar -czf archive.tar.gz dir/          # create compressed archive
+tar -xzf archive.tar.gz               # extract
+rsync -av src/ user@host:/dest/       # sync local → remote
+du -sh *                              # disk usage of each item here
+df -h                                 # disk usage of filesystems
+```
+</Level>
+
+<Level show="medium">
+**find — search the filesystem**
+
+```bash
+# By name
+find . -name "*.py"                    # case-sensitive
+find . -iname "*.PY"                   # case-insensitive
+
+# By type
+find . -type f                         # files only
+find . -type d                         # directories only
+find . -type l                         # symlinks only
+
+# By time
+find . -mtime -7                       # modified < 7 days ago
+find . -mtime +30                      # modified > 30 days ago
+find . -newer reference.txt            # newer than reference file
+
+# By size
+find . -size +100M                     # larger than 100MB
+find . -size -1k                       # smaller than 1KB
+
+# Execute a command on results
+find . -name "*.log" -exec rm {} \;    # delete matching files
+find . -name "*.log" -exec gzip {} +  # gzip (faster: batches args)
+find . -name "*.py" | xargs grep "TODO"  # grep in found files
+```
+
+**tar — archiving**
+
+```bash
+# Create
+tar -czf archive.tar.gz dir/           # create gzip-compressed
+tar -cjf archive.tar.bz2 dir/          # bzip2
+tar -cJf archive.tar.xz dir/           # xz (smaller, slower)
+tar -cf archive.tar dir/               # uncompressed
+
+# Extract
+tar -xzf archive.tar.gz                # to current dir
+tar -xzf archive.tar.gz -C /target/   # to specific dir
+
+# List contents
+tar -tzf archive.tar.gz
+
+# Extract single file
+tar -xzf archive.tar.gz path/to/file
+```
+
+**rsync — efficient file sync**
+
+```bash
+rsync -av src/ dest/                   # local sync
+rsync -av src/ user@host:/dest/        # to remote
+rsync -av user@host:/src/ dest/        # from remote
+rsync -av --delete src/ dest/          # mirror (delete extra files in dest)
+rsync -av --exclude="*.log" src/ dest/ # exclude pattern
+rsync -av --dry-run src/ dest/         # preview without applying
+rsync -avz src/ user@host:/dest/       # compress in transit
+```
+
+Note: `src/` (trailing slash) = sync contents of src. `src` (no slash) = sync the src directory itself.
+
+**Disk usage**
+
+```bash
+du -sh *                               # size of each item in current dir
+du -sh /var/log/*                      # size of each item in /var/log
+du -sh --max-depth=1 /                 # top-level dirs on /
+du -h /var/log | sort -h | tail -20   # 20 largest items
+
+df -h                                  # filesystem usage
+df -h /var/log                         # specific filesystem
+df -i                                  # inode usage
+```
+</Level>
+
+<Level show="long">
+**find with complex expressions**
+
+```bash
+# AND (default): files modified < 7 days AND > 100MB
+find /var/log -mtime -7 -size +100M
+
+# OR: .log OR .gz files
+find . \( -name "*.log" -o -name "*.gz" \)
+
+# NOT: everything except .git directories
+find . -not -path "*/.git/*" -name "*.py"
+
+# find + xargs (safer than -exec for large result sets)
+find . -name "*.tmp" -print0 | xargs -0 rm   # null-delimited (handles spaces in filenames)
+
+# Find files owned by user
+find /home -user alice -type f
+
+# Find files with specific permissions
+find /etc -perm 644 -type f
+find /usr/bin -perm /u+s              # setuid files
+```
+
+**Symlinks**
+
+```bash
+ln -s /path/to/target linkname        # create symlink
+ln -sf /new/target linkname           # force overwrite existing symlink
+ls -la                                # shows -> target
+readlink linkname                     # print symlink target
+readlink -f linkname                  # resolve full absolute path
+
+# Find broken symlinks
+find . -type l -not -exec test -e {} \; -print
+```
+
+**File descriptor limits and large files**
+
+```bash
+# Split large file into chunks
+split -b 1G largefile.tar.gz part_    # 1GB chunks named part_aa, part_ab...
+cat part_a* > restored.tar.gz         # reassemble
+
+# Check open file descriptors
+lsof | wc -l                          # total open FDs system-wide
+lsof -p $$ | wc -l                    # FDs for current shell
+cat /proc/$PID/fd | ls -la            # FDs for specific PID
+
+# Truncate (empty) a file without deleting it (preserves open FDs)
+> file.log
+truncate -s 0 file.log
+```
+
+**Watching files change**
+
+```bash
+watch -n 2 'ls -lh /var/log/*.log'   # refresh every 2s
+inotifywait -m /var/log -e modify     # event when a file changes
+tail -f /var/log/syslog               # stream additions
+```
+
+**Copying large amounts of data**
+
+For copying within the same host, `cp -a` (archive mode: preserve permissions, timestamps, ownership) is fine. For large data sets, `rsync` is better — it checksums and skips unchanged files, making re-runs (after interruption) fast.
+
+For network copies where bandwidth matters, consider:
+```bash
+# Pipe through compression
+tar -czf - src/ | ssh user@host "tar -xzf - -C /dest/"
+
+# Or rsync with compression
+rsync -avz --progress src/ user@host:/dest/
+```
+
+**`less` for browsing large files**
+
+```bash
+less +F file.log          # start in follow mode (like tail -f; press Ctrl+C to scroll)
+less -S file.log          # don't wrap long lines (scroll horizontally)
+/pattern                  # search forward
+n / N                     # next / previous match
+g / G                     # top / bottom of file
+:n                        # next file (if multiple given)
+q                         # quit
+```
+</Level>

@@ -1,0 +1,147 @@
+---
+title: htop
+sidebar_label: htop
+sidebar_position: 3
+tutorials:
+  - label: "htop explained (peteris.rocks)"
+    url: https://peteris.rocks/blog/htop/
+  - label: "htop man page"
+    url: https://man7.org/linux/man-pages/man1/htop.1.html
+---
+
+# htop
+
+<Level show="short">
+`htop` is an interactive process viewer. Launch it with `htop`. Common keys:
+
+```
+F9 / k    send signal to process (kill, etc.)
+F6        sort by column
+/         search/filter processes
+t         toggle tree view
+q         quit
+```
+</Level>
+
+<Level show="medium">
+**Interface anatomy**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  CPU  [||||||||                    20%]    Tasks: 124, 42 thr│
+│  Mem  [|||||||||||||||||           68%]   Load avg: 0.8 1.2  │
+│  Swp  [|                           3%]   Uptime: 5 days      │
+├─────────────────────────────────────────────────────────────┤
+│ PID  USER  PRI NI  VIRT  RES  SHR  S  CPU%  MEM%  TIME  CMD │
+│ 1234 root   20  0  512M  64M  12M  S   5.2   1.2  3:41  ..  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Column meanings**
+
+| Column | Meaning |
+|--------|---------|
+| PID | Process ID |
+| USER | Process owner |
+| PRI/NI | Priority / Nice value (-20 to 19; lower = higher priority) |
+| VIRT | Virtual memory (all mapped, including unused) |
+| RES | Resident memory (actually in RAM) |
+| SHR | Shared memory (shared with other processes) |
+| S | State: R(running), S(sleeping), D(disk wait), Z(zombie), T(stopped) |
+| CPU% | CPU usage over last interval |
+| MEM% | RES as % of total RAM |
+| TIME | Cumulative CPU time |
+
+**Key bindings**
+
+| Key | Action |
+|-----|--------|
+| `F1` | Help |
+| `F2` | Setup (columns, colours, meters) |
+| `F3` / `/` | Search process by name |
+| `F4` | Filter (show only matching processes) |
+| `F5` | Toggle tree view (parent→child) |
+| `F6` | Choose sort column |
+| `F7` / `F8` | Lower / raise nice value (renice) |
+| `F9` / `k` | Kill (send signal) |
+| `F10` / `q` | Quit |
+| `Space` | Tag a process (for batch operations) |
+| `u` | Filter by user |
+| `H` | Show/hide user threads |
+| `I` | Invert sort order |
+| `t` | Tree view toggle (alternative) |
+
+**Sorting and filtering**
+
+- Press `F6` to pick sort column — CPU%, MEM%, PID, TIME, etc.
+- Press `/` or `F3` to filter — type a string, only matching processes shown
+- Press `u` then select a user to show only their processes
+</Level>
+
+<Level show="long">
+**Reading the CPU bars**
+
+Each CPU core has its own bar. Colours indicate process priority:
+
+| Colour (default) | Meaning |
+|-----------------|---------|
+| Green | Normal user processes |
+| Blue | Low priority (nice > 0) |
+| Red | Kernel processes |
+| Cyan | Virtualisation |
+
+A consistently full bar means a single core is saturated. Multi-core machines can have one core pegged while others are idle — check individual bars, not just the average.
+
+**Memory interpretation**
+
+- **VIRT**: Total virtual address space of the process. Often huge due to memory-mapped files, shared libraries, and pre-allocated-but-unused memory. Usually not a useful number.
+- **RES**: Actually resident in RAM. This is what you care about when the machine is low on memory.
+- **SHR**: Portion of RES shared with other processes (shared libs). To get "private" memory: RES - SHR.
+- **Buffers/Cache** (shown in the Mem bar): Memory the kernel uses for filesystem cache. This is recoverable — Linux shows it as used but will free it under memory pressure.
+
+**Process states explained**
+
+| State | Meaning |
+|-------|---------|
+| `R` | Running on CPU or in run queue |
+| `S` | Sleeping (interruptible — waiting for I/O, signal, etc.) |
+| `D` | Uninterruptible sleep (disk I/O — can't be killed) |
+| `Z` | Zombie (exited but parent hasn't called wait()) |
+| `T` | Stopped (Ctrl+Z or SIGSTOP) |
+
+Many `D` processes = disk I/O bottleneck. Zombie processes are usually harmless but indicate a bug in the parent.
+
+**Signals (F9)**
+
+| Signal | Number | Effect |
+|--------|--------|--------|
+| SIGTERM | 15 | Graceful shutdown request |
+| SIGKILL | 9 | Immediate kill (unblockable) |
+| SIGSTOP | 19 | Pause process |
+| SIGCONT | 18 | Resume paused process |
+| SIGHUP | 1 | Reload config (for many daemons) |
+
+Always try SIGTERM first. Use SIGKILL only if the process doesn't respond — it can't clean up (close files, flush buffers, release locks).
+
+**Load average vs CPU usage**
+
+The three load average numbers (1min, 5min, 15min) count processes in `R` or `D` state. On a 4-core machine, a load of 4.0 means cores are fully utilised. A load of 8.0 means there's a queue — processes are waiting.
+
+High load with low CPU% often means I/O wait (D-state processes). Use `iostat -x 1` to confirm disk bottlenecks.
+
+**Customising htop (F2 — Setup)**
+
+- Add/remove columns (e.g., add PPID, NLWP for thread count, or DISK-READ/WRITE)
+- Choose what appears in the header meters (swap, battery, network)
+- Save config to `~/.config/htop/htoprc`
+
+**Alternatives**
+
+| Tool | Why use it |
+|------|-----------|
+| `top` | Always available, no install needed |
+| `btop` | Modern UI, network/disk graphs |
+| `glances` | Remote monitoring via web UI |
+| `atop` | Persists to disk — review historical CPU/disk spikes |
+| `iotop` | Per-process disk I/O (like htop but for disks) |
+</Level>

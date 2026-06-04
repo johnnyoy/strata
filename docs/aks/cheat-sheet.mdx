@@ -1,0 +1,84 @@
+---
+title: AKS Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# AKS Cheat Sheet
+
+<CheatSection title="Cluster CRUD">
+
+| Command | What it does |
+|---------|-------------|
+| `az aks create -g <rg> -n <name> --node-count 3 --generate-ssh-keys` | Create cluster |
+| `az aks show -g <rg> -n <name> -o table` | Show cluster info |
+| `az aks list -o table` | List all clusters |
+| `az aks stop -g <rg> -n <name>` | Stop cluster (deallocate VMs) |
+| `az aks start -g <rg> -n <name>` | Start stopped cluster |
+| `az aks delete -g <rg> -n <name>` | Delete cluster |
+
+</CheatSection>
+
+<CheatSection title="Credentials">
+
+| Command | What it does |
+|---------|-------------|
+| `az aks get-credentials -g <rg> -n <name>` | Merge kubeconfig |
+| `az aks get-credentials -g <rg> -n <name> --admin` | Admin credentials (bypass AAD) |
+| `kubelogin convert-kubeconfig -l azurecli` | Convert to interactive Azure CLI login |
+
+</CheatSection>
+
+<CheatSection title="Node Pools">
+
+| Command | What it does |
+|---------|-------------|
+| `az aks nodepool list -g <rg> --cluster-name <name> -o table` | List pools |
+| `az aks nodepool add -g <rg> --cluster-name <name> --name <pool> --node-count 3` | Add pool |
+| `az aks nodepool scale -g <rg> --cluster-name <name> --name <pool> --node-count 5` | Scale pool |
+| `az aks nodepool upgrade -g <rg> --cluster-name <name> --name <pool> --node-image-only` | Patch OS |
+| `az aks nodepool delete -g <rg> --cluster-name <name> --name <pool>` | Delete pool |
+
+</CheatSection>
+
+<CheatSection title="Upgrades">
+
+| Command | What it does |
+|---------|-------------|
+| `az aks get-upgrades -g <rg> -n <name> -o table` | Available K8s versions |
+| `az aks upgrade -g <rg> -n <name> --kubernetes-version 1.30.0` | Upgrade cluster |
+| `az aks update -g <rg> -n <name> --auto-upgrade-channel stable` | Enable auto-upgrade |
+
+</CheatSection>
+
+<CheatSection title="Ingress & Networking">
+
+| Command | What it does |
+|---------|-------------|
+| `helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace` | Install NGINX ingress |
+| `kubectl get svc -n ingress-nginx` | Get external IP |
+| `az aks enable-addons -a ingress-appgw --appgw-name <gw> -g <rg> -n <name>` | Enable AGIC |
+
+</CheatSection>
+
+<CheatSection title="Storage">
+
+| Storage class | Access | Use case |
+|--------------|--------|---------|
+| `managed-csi` | RWO | Dev / low-cost disk |
+| `managed-premium` | RWO | Production databases |
+| `azurefile-csi` | RWX | Shared storage |
+| `azurefile-csi-premium` | RWX | High-throughput shared |
+
+</CheatSection>
+
+<CheatSection title="Monitoring & Diagnostics">
+
+| Command | What it does |
+|---------|-------------|
+| `az aks enable-addons -a monitoring -g <rg> -n <name> --workspace-resource-id <id>` | Enable Container Insights |
+| `az aks show -g <rg> -n <name> --query 'provisioningState'` | Check provisioning state |
+| `kubectl top nodes` | Node CPU/memory |
+| `kubectl top pods -A` | Pod CPU/memory all namespaces |
+
+</CheatSection>

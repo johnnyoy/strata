@@ -1,0 +1,9 @@
+{
+  "label": "AKS",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "slug": "/aks",
+    "description": "Azure Kubernetes Service — managed Kubernetes on Azure, from cluster creation to production workloads."
+  }
+}

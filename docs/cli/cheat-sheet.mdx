@@ -1,0 +1,120 @@
+---
+title: CLI Commands Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# CLI Commands Cheat Sheet
+
+<CheatSection title="grep — Common Flags">
+
+| Flag | Meaning |
+|------|---------|
+| `-i` | Case-insensitive |
+| `-r` | Recursive through directories |
+| `-n` | Show line numbers |
+| `-l` | Only print filenames with matches |
+| `-v` | Invert — lines NOT matching |
+| `-c` | Count matching lines |
+| `-w` | Whole word match only |
+| `-E` | Extended regex (`+`, `?`, `\|`, `()`) |
+| `-F` | Fixed string (no regex, faster) |
+| `-o` | Print only matched part |
+| `-A <n>` | n lines after match |
+| `-B <n>` | n lines before match |
+| `-C <n>` | n lines around match |
+| `-q` | Quiet — just exit code (0=match, 1=no match) |
+
+</CheatSection>
+
+<CheatSection title="grep — Patterns">
+
+| Pattern | Matches |
+|---------|---------|
+| `grep "error" file` | Literal string |
+| `grep -E "err\|warn"` | Either word |
+| `grep "^start"` | Lines starting with "start" |
+| `grep "end$"` | Lines ending with "end" |
+| `grep -w "foo"` | Whole word "foo" |
+| `grep -E "[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"` | IP address |
+| `grep -rl "TODO" --include="*.py" .` | Python files containing TODO |
+| `tail -f log \| grep --line-buffered "ERROR"` | Live error stream |
+
+</CheatSection>
+
+<CheatSection title="vim — Modes">
+
+| Key | Action |
+|-----|--------|
+| `i` | Insert before cursor |
+| `a` | Insert after cursor |
+| `o` / `O` | New line below / above + insert |
+| `I` / `A` | Insert at line start / end |
+| `Esc` | Return to Normal mode |
+| `v` / `V` | Visual character / line select |
+| `Ctrl+v` | Visual block select |
+| `:` | Command mode |
+
+</CheatSection>
+
+<CheatSection title="vim — Navigation">
+
+| Key | Action |
+|-----|--------|
+| `h j k l` | ← ↓ ↑ → |
+| `w` / `b` | Next / prev word |
+| `0` / `$` | Start / end of line |
+| `gg` / `G` | First / last line |
+| `:42` | Go to line 42 |
+| `Ctrl+d` / `Ctrl+u` | Half-page down / up |
+| `%` | Jump to matching bracket |
+| `*` | Search word under cursor |
+
+</CheatSection>
+
+<CheatSection title="vim — Editing">
+
+| Key | Action |
+|-----|--------|
+| `x` | Delete character |
+| `dd` / `D` | Delete line / to end of line |
+| `dw` / `ciw` | Delete word / change word |
+| `yy` / `p` | Copy line / paste below |
+| `u` / `Ctrl+r` | Undo / redo |
+| `.` | Repeat last change |
+| `:%s/old/new/g` | Replace all in file |
+| `:%s/old/new/gc` | Replace with confirmation |
+| `:g/pattern/d` | Delete all matching lines |
+
+</CheatSection>
+
+<CheatSection title="htop — Key Bindings">
+
+| Key | Action |
+|-----|--------|
+| `F3` / `/` | Search process by name |
+| `F4` | Filter (show only matching) |
+| `F5` / `t` | Tree view |
+| `F6` | Sort by column |
+| `F9` / `k` | Send signal (kill, etc.) |
+| `u` | Filter by user |
+| `H` | Show/hide threads |
+| `Space` | Tag process |
+| `I` | Invert sort |
+| `q` | Quit |
+
+</CheatSection>
+
+<CheatSection title="htop — Process States">
+
+| State | Meaning |
+|-------|---------|
+| `R` | Running / in run queue |
+| `S` | Sleeping (waiting for I/O) |
+| `D` | Uninterruptible disk wait |
+| `Z` | Zombie (parent not waited) |
+| `T` | Stopped |
+| Signal 15 (SIGTERM) | Graceful shutdown |
+| Signal 9 (SIGKILL) | Force kill |
+
+</CheatSection>

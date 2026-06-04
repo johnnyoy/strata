@@ -1,0 +1,189 @@
+---
+title: AKS Cluster Management
+sidebar_label: Cluster Management
+sidebar_position: 2
+tutorials:
+  - label: "az aks CLI reference"
+    url: https://learn.microsoft.com/en-us/cli/azure/aks
+  - label: "AKS upgrade guide"
+    url: https://learn.microsoft.com/en-us/azure/aks/upgrade-cluster
+---
+
+# AKS Cluster Management
+
+<Level show="short">
+```bash
+# Create
+az aks create -g my-rg -n my-cluster \
+  --node-count 3 --node-vm-size Standard_D4ds_v5 \
+  --generate-ssh-keys --enable-managed-identity
+
+# Connect
+az aks get-credentials -g my-rg -n my-cluster
+
+# Upgrade
+az aks get-upgrades -g my-rg -n my-cluster   # available versions
+az aks upgrade -g my-rg -n my-cluster --kubernetes-version 1.30.0
+
+# Delete
+az aks delete -g my-rg -n my-cluster
+```
+</Level>
+
+<Level show="medium">
+**Creating a production-ready cluster**
+
+```bash
+az aks create \
+  --resource-group my-rg \
+  --name my-cluster \
+  --location eastus \
+  --node-count 3 \
+  --node-vm-size Standard_D4ds_v5 \
+  --zones 1 2 3 \                        # availability zones
+  --enable-managed-identity \
+  --enable-cluster-autoscaler \
+  --min-count 3 --max-count 10 \
+  --network-plugin azure \               # Azure CNI
+  --enable-oidc-issuer \
+  --enable-workload-identity \
+  --auto-upgrade-channel stable \
+  --generate-ssh-keys
+```
+
+**Node pool operations**
+
+```bash
+# Add a node pool
+az aks nodepool add \
+  --resource-group my-rg --cluster-name my-cluster \
+  --name userpool \
+  --node-count 3 --node-vm-size Standard_D8ds_v5 \
+  --zones 1 2 3 \
+  --enable-cluster-autoscaler --min-count 2 --max-count 20
+
+# Scale manually
+az aks nodepool scale -g my-rg --cluster-name my-cluster \
+  --name userpool --node-count 5
+
+# Upgrade only node images (OS patches)
+az aks nodepool upgrade -g my-rg --cluster-name my-cluster \
+  --name userpool --node-image-only
+
+# Delete a pool
+az aks nodepool delete -g my-rg --cluster-name my-cluster --name userpool
+```
+
+**Connecting and credentials**
+
+```bash
+az aks get-credentials -g my-rg -n my-cluster           # merge into ~/.kube/config
+az aks get-credentials -g my-rg -n my-cluster --admin    # admin credentials (bypass AAD)
+az aks get-credentials -g my-rg -n my-cluster --overwrite-existing
+```
+
+**Show cluster info**
+
+```bash
+az aks show -g my-rg -n my-cluster -o table
+az aks nodepool list -g my-rg --cluster-name my-cluster -o table
+az aks get-upgrades -g my-rg -n my-cluster -o table
+```
+</Level>
+
+<Level show="long">
+**Availability zones and spread**
+
+Distributing nodes across Availability Zones protects against zone-level failures. To fully benefit:
+1. Node pool must be created with `--zones 1 2 3`
+2. Persistent volumes must use ZRS (zone-redundant) storage class, or pods become stuck if rescheduled to a different zone than their PVC
+3. Use `topologySpreadConstraints` to spread pods across zones:
+
+```yaml
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: my-app
+```
+
+**Stop / start clusters (cost saving)**
+
+AKS supports stopping a cluster (deallocates all VMs, preserving state) and restarting it. Control plane SLA pauses during stop.
+
+```bash
+az aks stop -g my-rg -n my-cluster
+az aks start -g my-rg -n my-cluster
+```
+
+Not suitable for production, but useful for dev/test clusters outside business hours.
+
+**RBAC with Entra ID groups**
+
+Map Entra ID group object IDs to Kubernetes roles:
+
+```bash
+# Get the object ID of your AD group
+az ad group show --group "k8s-admins" --query id -o tsv
+
+# Assign cluster admin role to the group
+az aks update \
+  --resource-group my-rg \
+  --name my-cluster \
+  --aad-admin-group-object-ids <group-object-id>
+```
+
+For fine-grained access, use Kubernetes `RoleBinding`/`ClusterRoleBinding` with the group object ID as the subject name.
+
+**Cluster maintenance windows**
+
+Control when AKS applies auto-upgrades to minimise disruption:
+
+```bash
+az aks maintenanceconfiguration add \
+  --resource-group my-rg \
+  --cluster-name my-cluster \
+  --name default \
+  --weekday Saturday \
+  --start-hour 2     # 2:00–3:00 AM UTC
+```
+
+**Diagnostics and monitoring**
+
+```bash
+# Enable Azure Monitor (Container Insights)
+az aks enable-addons -a monitoring -g my-rg -n my-cluster \
+  --workspace-resource-id /subscriptions/.../workspaces/my-law
+
+# Run AKS Periscope (collects diagnostics into a storage account)
+az aks kollect -g my-rg -n my-cluster \
+  --storage-account my-sa --sas-token "?sv=..."
+
+# Check cluster health
+az aks show -g my-rg -n my-cluster --query 'provisioningState'
+```
+
+**Upgrade process internals**
+
+1. AKS cordons and drains nodes one by one (respecting PDB — PodDisruptionBudget)
+2. New node is provisioned at the target Kubernetes version
+3. Workloads are scheduled onto new node
+4. Old node is deleted
+5. Process repeats for each node
+
+Always define `PodDisruptionBudget` for stateful workloads to prevent AKS from removing all replicas at once during upgrades:
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-app-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: my-app
+```
+</Level>

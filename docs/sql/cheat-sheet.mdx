@@ -1,0 +1,99 @@
+---
+title: SQL Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# SQL Cheat Sheet
+
+<CheatSection title="Querying">
+
+| Syntax | What it does |
+|--------|-------------|
+| `SELECT col1, col2 FROM table` | Basic select |
+| `SELECT * FROM table` | All columns |
+| `SELECT DISTINCT col FROM table` | Unique values |
+| `SELECT col AS alias FROM table` | Column alias |
+| `SELECT COUNT(*), AVG(salary) FROM emp` | Aggregate |
+| `LIMIT 10` | Restrict rows returned |
+| `LIMIT 10 OFFSET 20` | Pagination |
+| `ORDER BY col DESC` | Sort descending |
+
+</CheatSection>
+
+<CheatSection title="Filtering">
+
+| Syntax | What it does |
+|--------|-------------|
+| `WHERE col = 'value'` | Exact match |
+| `WHERE col != 'value'` | Not equal |
+| `WHERE col > 10 AND col < 100` | Range |
+| `WHERE col BETWEEN 10 AND 100` | Inclusive range |
+| `WHERE col IN ('a', 'b', 'c')` | Set membership |
+| `WHERE col IS NULL` | Null check |
+| `WHERE col IS NOT NULL` | Non-null check |
+| `WHERE col LIKE 'A%'` | Pattern match (% = wildcard) |
+| `WHERE col ILIKE 'a%'` | Case-insensitive LIKE (PG) |
+
+</CheatSection>
+
+<CheatSection title="Joins">
+
+| Join type | Returns |
+|-----------|---------|
+| `INNER JOIN` | Only rows with matches in both tables |
+| `LEFT JOIN` | All left rows + matched right rows |
+| `RIGHT JOIN` | All right rows + matched left rows |
+| `FULL OUTER JOIN` | All rows from both tables |
+| `CROSS JOIN` | Cartesian product |
+
+```sql
+SELECT u.name, o.amount
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+```
+
+</CheatSection>
+
+<CheatSection title="Aggregation">
+
+| Function | What it does |
+|----------|-------------|
+| `COUNT(*)` | All rows |
+| `COUNT(col)` | Non-null values |
+| `SUM(col)` | Total |
+| `AVG(col)` | Mean |
+| `MIN(col)` / `MAX(col)` | Extremes |
+| `GROUP BY col` | Group rows for aggregation |
+| `HAVING COUNT(*) > 5` | Filter after grouping |
+
+</CheatSection>
+
+<CheatSection title="Window Functions">
+
+| Function | What it does |
+|----------|-------------|
+| `ROW_NUMBER() OVER (ORDER BY col)` | Sequential row number |
+| `RANK() OVER (ORDER BY col)` | Rank with gaps on ties |
+| `DENSE_RANK() OVER (ORDER BY col)` | Rank without gaps |
+| `LAG(col, 1) OVER (ORDER BY date)` | Previous row value |
+| `LEAD(col, 1) OVER (ORDER BY date)` | Next row value |
+| `SUM(col) OVER (PARTITION BY dept)` | Running total per group |
+| `PARTITION BY dept` | Reset window per group |
+
+</CheatSection>
+
+<CheatSection title="DDL & Indexes">
+
+| Statement | What it does |
+|-----------|-------------|
+| `CREATE TABLE t (id SERIAL PRIMARY KEY, name TEXT NOT NULL)` | Create table |
+| `ALTER TABLE t ADD COLUMN age INT` | Add column |
+| `ALTER TABLE t DROP COLUMN age` | Drop column |
+| `DROP TABLE t` | Delete table |
+| `CREATE INDEX idx ON t(col)` | Basic index |
+| `CREATE INDEX idx ON t(col) WHERE active = true` | Partial index |
+| `CREATE UNIQUE INDEX idx ON t(email)` | Unique index |
+| `EXPLAIN ANALYZE SELECT ...` | Show query plan + timings |
+
+</CheatSection>

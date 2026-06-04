@@ -1,0 +1,154 @@
+---
+title: Kubectl Basics
+sidebar_label: Basics
+sidebar_position: 1
+tutorials:
+  - label: "kubectl reference docs"
+    url: https://kubernetes.io/docs/reference/kubectl/
+  - label: "kubectl cheatsheet (official)"
+    url: https://kubernetes.io/docs/reference/kubectl/quick-reference/
+  - label: "Kubernetes concepts"
+    url: https://kubernetes.io/docs/concepts/
+---
+
+# Kubectl Basics
+
+<Level show="short">
+`kubectl` is the CLI for Kubernetes. It talks to the cluster API server using credentials stored in `~/.kube/config`.
+
+```bash
+kubectl get pods                     # list pods in current namespace
+kubectl get pods -n kube-system      # specific namespace
+kubectl get all                      # pods, services, deployments, etc.
+kubectl config get-contexts          # list clusters
+kubectl config use-context my-ctx    # switch cluster
+```
+</Level>
+
+<Level show="medium">
+`kubectl` reads `~/.kube/config` (or `$KUBECONFIG`) to find cluster API endpoints and credentials. A **context** binds a cluster + user + namespace into a named shortcut.
+
+**Context management**
+
+```bash
+kubectl config get-contexts              # list all contexts
+kubectl config current-context           # show active context
+kubectl config use-context staging       # switch context
+kubectl config set-context --current --namespace=my-ns  # change default namespace
+```
+
+**Core read commands**
+
+```bash
+kubectl get pods                         # list pods
+kubectl get pods -o wide                 # with node + IP
+kubectl get pods -l app=frontend         # filter by label
+kubectl get pod my-pod -o yaml           # full YAML output
+kubectl describe pod my-pod              # human-readable detail + events
+```
+
+**Applying and deleting resources**
+
+```bash
+kubectl apply -f deployment.yaml         # create or update
+kubectl apply -f ./manifests/            # apply whole directory
+kubectl delete -f deployment.yaml        # delete by manifest
+kubectl delete pod my-pod                # delete by name
+kubectl delete pod my-pod --grace-period=0 --force  # immediate
+```
+
+**Namespaces**
+
+```bash
+kubectl get ns                           # list namespaces
+kubectl create ns my-namespace
+kubectl get pods --all-namespaces        # or -A
+```
+</Level>
+
+<Level show="long">
+**How kubectl works**
+
+Every `kubectl` call is an HTTP request to the Kubernetes API server (`kube-apiserver`). The kubeconfig file provides:
+- **cluster**: API server URL + CA certificate
+- **user**: credentials (token, client cert, or exec plugin for cloud auth like `kubelogin`)
+- **context**: a named binding of cluster + user + default namespace
+
+**Kubeconfig file structure**
+
+```yaml
+apiVersion: v1
+kind: Config
+current-context: prod
+clusters:
+  - name: prod
+    cluster:
+      server: https://prod-api.example.com
+      certificate-authority-data: BASE64...
+users:
+  - name: alice
+    user:
+      token: eyJhbGc...
+contexts:
+  - name: prod
+    context:
+      cluster: prod
+      user: alice
+      namespace: default
+```
+
+**Multiple kubeconfigs**: Set `KUBECONFIG=~/.kube/config:~/.kube/work-config` to merge multiple files. `kubectl config view --merge --flatten` produces a single merged file.
+
+**Output formats**
+
+| Flag | Output |
+|------|--------|
+| `-o wide` | Extra columns (node, IP) |
+| `-o yaml` | Full YAML resource |
+| `-o json` | Full JSON resource |
+| `-o jsonpath='{.status.phase}'` | Extract specific field |
+| `-o custom-columns=NAME:.metadata.name,STATUS:.status.phase` | Custom columns |
+
+**Imperative vs declarative**
+
+| Style | Example | When to use |
+|-------|---------|------------|
+| Imperative | `kubectl create deployment nginx --image=nginx` | Quick exploration, one-offs |
+| Declarative | `kubectl apply -f manifest.yaml` | Production, GitOps, repeatable |
+
+Always use declarative (apply) in CI/CD pipelines. Imperative commands can cause config drift.
+
+**Dry-run and diff**
+
+```bash
+kubectl apply -f deployment.yaml --dry-run=client   # validate locally
+kubectl apply -f deployment.yaml --dry-run=server   # validate against API
+kubectl diff -f deployment.yaml                     # show what would change
+```
+
+**Field selectors**
+
+```bash
+kubectl get pods --field-selector status.phase=Running
+kubectl get pods --field-selector spec.nodeName=node01
+```
+
+**Resource short names**
+
+| Short | Full |
+|-------|------|
+| `po` | pods |
+| `deploy` | deployments |
+| `svc` | services |
+| `ns` | namespaces |
+| `cm` | configmaps |
+| `sa` | serviceaccounts |
+| `pv` | persistentvolumes |
+| `pvc` | persistentvolumeclaims |
+
+```bash
+kubectl get po,svc,deploy   # multiple resource types at once
+```
+
+**Plugins**: `kubectl` has a plugin system. Install `krew` (the plugin manager) to get tools like `kubectl ctx` (fast context switch), `kubectl ns` (namespace switch), `kubectl neat` (strip noise from YAML).
+</Level>

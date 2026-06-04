@@ -1,0 +1,160 @@
+---
+title: Kubectl Debugging
+sidebar_label: Debugging
+sidebar_position: 3
+tutorials:
+  - label: "Kubernetes: Troubleshoot Applications"
+    url: https://kubernetes.io/docs/tasks/debug/debug-application/
+  - label: "Kubernetes: Debug Running Pods"
+    url: https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/
+---
+
+# Kubectl Debugging
+
+<Level show="short">
+```bash
+kubectl describe pod my-pod            # events + status detail
+kubectl get events --sort-by=.lastTimestamp
+kubectl logs my-pod --previous         # logs from last (crashed) container
+kubectl get pod my-pod -o yaml         # full spec + status
+kubectl top pod my-pod                 # live CPU/memory
+```
+</Level>
+
+<Level show="medium">
+**Events — the first place to look**
+
+```bash
+kubectl get events -n my-namespace --sort-by=.lastTimestamp
+kubectl get events --field-selector involvedObject.name=my-pod
+kubectl describe pod my-pod    # Events section at the bottom
+```
+
+Events expire after ~1 hour by default. Check them quickly after a failure.
+
+**Inspecting resources with JSONPath**
+
+```bash
+# Get the image of the first container in a pod
+kubectl get pod my-pod -o jsonpath='{.spec.containers[0].image}'
+
+# Get all pod names and their status
+kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.phase}{"\n"}{end}'
+
+# Get node names of all running pods
+kubectl get pods -o wide --no-headers | awk '{print $7}'
+```
+
+**Custom columns**
+
+```bash
+kubectl get pods -o custom-columns=\
+  NAME:.metadata.name,\
+  STATUS:.status.phase,\
+  NODE:.spec.nodeName,\
+  IMAGE:.spec.containers[0].image
+```
+
+**Common failure patterns**
+
+| Symptom | Likely cause | First check |
+|---------|-------------|-------------|
+| `ImagePullBackOff` | Image doesn't exist / bad tag / registry auth | `kubectl describe pod` → Events |
+| `CrashLoopBackOff` | App crashes at startup | `kubectl logs --previous` |
+| `Pending` forever | No node has capacity / unschedulable | `kubectl describe pod` → "Insufficient CPU/memory" or taint mismatch |
+| `OOMKilled` | Memory limit too low | `kubectl describe pod` → `Last State: OOMKilled`; increase `limits.memory` |
+| Service unreachable | Selector mismatch | Compare `svc` selector labels with `pod` labels |
+
+**Checking service → pod connectivity**
+
+```bash
+kubectl get svc my-service -o yaml     # check selector
+kubectl get pods -l app=my-app         # pods that match the selector
+kubectl get endpoints my-service       # if empty, selector matches nothing
+```
+</Level>
+
+<Level show="long">
+**Ephemeral debug containers (K8s 1.23+)**
+
+Distroless and minimal images have no shell, making `kubectl exec` useless. Ephemeral containers let you inject a debug image into a running pod's namespaces:
+
+```bash
+kubectl debug -it my-pod --image=nicolaka/netshoot --target=app
+```
+
+The debug container shares the process, network, and (optionally) filesystem namespaces of the target container. `nicolaka/netshoot` includes `curl`, `dig`, `tcpdump`, `netstat`, `iperf3`, and more.
+
+**Copying a pod for debugging**
+
+```bash
+kubectl debug my-pod -it --copy-to=debug-pod --image=ubuntu
+```
+
+Creates a copy of `my-pod` with `ubuntu` as the image (runs as root, has a shell). Changes to the copy don't affect the original. Delete after use.
+
+**Network debugging from inside the cluster**
+
+```bash
+# Spawn a temporary pod in the cluster to test DNS and connectivity
+kubectl run netdebug --image=nicolaka/netshoot --rm -it --restart=Never -- bash
+
+# From inside:
+curl http://my-service.my-namespace.svc.cluster.local
+dig my-service.my-namespace.svc.cluster.local
+nslookup kubernetes.default
+```
+
+**Node-level debugging**
+
+```bash
+# Shell into the node (requires node debug privilege — admin only)
+kubectl debug node/my-node -it --image=ubuntu
+```
+
+The node root filesystem is at `/host` inside the debug container.
+
+**Tailing events in real time**
+
+```bash
+kubectl get events -w              # watch mode
+kubectl get events -w --field-selector type=Warning   # warnings only
+```
+
+**Resource quota and limit ranges**
+
+```bash
+kubectl describe resourcequota -n my-namespace
+kubectl describe limitrange -n my-namespace
+```
+
+These explain why pods are rejected at admission time (quota exceeded) or why containers get different resource limits than specified.
+
+**Audit trail: what changed?**
+
+```bash
+kubectl rollout history deployment/my-app --revision=3  # what was in rev 3
+kubectl annotate deployment my-app kubernetes.io/change-cause="updated image to v2"  # add human note
+```
+
+**Useful third-party tools**
+
+| Tool | Purpose |
+|------|---------|
+| `k9s` | Terminal UI — browse all resources, logs, exec, in one place |
+| `stern` | Multi-pod log streaming with colour |
+| `kubecolor` | Colorises kubectl output |
+| `kubectx` / `kubens` | Fast context and namespace switching |
+| `kail` | Log streaming by label selector |
+| `popeye` | Cluster sanity scan — flags misconfigurations |
+
+**RBAC debugging**
+
+```bash
+kubectl auth can-i list pods --as=system:serviceaccount:default:my-sa
+kubectl auth can-i create deployments --namespace=prod
+kubectl describe clusterrolebinding | grep my-user
+```
+
+`kubectl auth can-i` lets you test permissions for any user or service account without needing to be that user — useful for diagnosing 403 errors.
+</Level>

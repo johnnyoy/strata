@@ -1,0 +1,221 @@
+---
+title: Flux Helm Releases
+sidebar_label: Helm Releases
+sidebar_position: 3
+tutorials:
+  - label: "Flux HelmRelease API reference"
+    url: https://fluxcd.io/flux/components/helm/helmreleases/
+  - label: "Flux Helm guide"
+    url: https://fluxcd.io/flux/guides/helmreleases/
+---
+
+# Flux Helm Releases
+
+<Level show="short">
+```yaml
+# 1. Point to a Helm repository
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: ingress-nginx
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://kubernetes.github.io/ingress-nginx
+---
+# 2. Declare a release
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: ingress-nginx
+  namespace: ingress-nginx
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: ingress-nginx
+      version: ">=4.0.0 <5.0.0"
+      sourceRef:
+        kind: HelmRepository
+        name: ingress-nginx
+        namespace: flux-system
+  values:
+    controller:
+      replicaCount: 2
+```
+</Level>
+
+<Level show="medium">
+**HelmRepository types**
+
+```yaml
+# Public Helm repository
+spec:
+  url: https://charts.bitnami.com/bitnami
+
+# Private OCI registry (e.g., ACR)
+spec:
+  type: oci
+  url: oci://myregistry.azurecr.io/helm
+  secretRef:
+    name: acr-credentials
+```
+
+**Version constraints**
+
+```yaml
+spec:
+  chart:
+    spec:
+      version: "4.7.2"               # exact
+      version: ">=4.0.0 <5.0.0"     # semver range
+      version: "*"                    # latest (not recommended for prod)
+```
+
+**Overriding values**
+
+```yaml
+spec:
+  values:
+    replicaCount: 3
+    image:
+      tag: v1.2.3
+  valuesFrom:
+    - kind: ConfigMap
+      name: my-app-values
+    - kind: Secret
+      name: my-app-secret-values
+      valuesKey: values.yaml         # key in the secret
+      optional: true
+```
+
+Values are merged: `values` → `valuesFrom` items (in order), with later items winning.
+
+**Upgrade policies**
+
+```yaml
+spec:
+  upgrade:
+    remediation:
+      retries: 3                    # retry failed upgrades
+  rollback:
+    enable: true                    # auto-rollback if upgrade fails
+  test:
+    enable: true                    # run `helm test` after install/upgrade
+```
+
+**Checking release status**
+
+```bash
+flux get helmreleases -A            # all namespaces
+flux get helmrelease my-release -n my-ns
+kubectl describe helmrelease my-release -n my-ns   # detailed conditions
+```
+</Level>
+
+<Level show="long">
+**HelmRelease reconciliation flow**
+
+1. **HelmRepository** is polled by the Source Controller on `spec.interval`. When a new chart version matching the constraint is found, a new `Artifact` is stored.
+2. **Helm Controller** detects the new artifact and runs `helm upgrade --install` (or `helm install` on first deploy).
+3. If `spec.test.enable: true`, Helm Controller runs `helm test` after deploy.
+4. If the release fails and `rollback.enable: true`, it runs `helm rollback`.
+
+The Helm Controller stores release state in a Kubernetes secret (same as regular Helm). You can view it with `helm list -A`.
+
+**Post-renderers**
+
+Apply Kustomize patches on top of a Helm chart's rendered manifests — without forking the chart:
+
+```yaml
+spec:
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: ingress-nginx-controller
+            patch: |
+              - op: add
+                path: /spec/template/spec/tolerations
+                value:
+                  - key: "dedicated"
+                    operator: "Equal"
+                    value: "ingress"
+                    effect: "NoSchedule"
+```
+
+**Drift detection**
+
+`HelmRelease` supports server-side apply and drift detection:
+
+```yaml
+spec:
+  driftDetection:
+    mode: enabled     # detect and report drift
+    # or: warn (alert only), disabled
+```
+
+When drift is detected (e.g., someone ran `helm upgrade` manually), Flux reconciles back to the desired state on the next interval.
+
+**Cross-namespace references**
+
+By default, a `HelmRelease` must reference a `HelmRepository` in the same namespace. To reference across namespaces (e.g., a shared `flux-system` repository):
+
+```yaml
+spec:
+  chart:
+    spec:
+      sourceRef:
+        kind: HelmRepository
+        name: bitnami
+        namespace: flux-system   # explicit namespace reference
+```
+
+Requires enabling cross-namespace references in the Helm Controller config.
+
+**OCI charts (e.g., ACR)**
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: my-charts
+  namespace: flux-system
+spec:
+  type: oci
+  url: oci://myregistry.azurecr.io/helm
+  interval: 10m
+  secretRef:
+    name: acr-credentials   # dockerconfigjson secret
+```
+
+For AKS with Workload Identity, use `azure-workload-identity` rather than static credentials.
+
+**Debugging failed HelmReleases**
+
+```bash
+flux logs --level=error -n flux-system    # Helm controller errors
+kubectl describe helmrelease my-release -n my-ns  # conditions + message
+helm history my-release -n my-ns          # Helm release history
+helm get values my-release -n my-ns       # currently applied values
+helm get manifest my-release -n my-ns     # rendered templates
+```
+
+Common failures:
+
+| Condition | Cause |
+|-----------|-------|
+| `HelmChartNotReady` | Chart fetch failed (wrong repo URL, network) |
+| `InstallFailed` | Helm install error (invalid values, RBAC) |
+| `UpgradeFailed` | Schema validation, hook failure, timeout |
+| `TestFailed` | `helm test` pods failed |
+| `ReconciliationFailed` | Generic — check controller logs |
+
+Force a re-install when stuck:
+```bash
+flux suspend helmrelease my-release -n my-ns
+kubectl delete secret -l owner=helm,name=my-release -n my-ns  # clear Helm state
+flux resume helmrelease my-release -n my-ns
+```
+</Level>

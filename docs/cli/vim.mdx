@@ -1,0 +1,195 @@
+---
+title: vim
+sidebar_label: vim
+sidebar_position: 2
+tutorials:
+  - label: "vimtutor (built-in interactive tutorial)"
+    url: https://vimschool.netlify.app/introduction/vimtutor/
+  - label: "Vim cheatsheet (devhints.io)"
+    url: https://devhints.io/vim
+  - label: "Practical Vim (book)"
+    url: https://pragprog.com/titles/dnvim2/practical-vim-second-edition/
+---
+
+# vim
+
+<Level show="short">
+Vim has modes. Press `i` to type, `Esc` to stop typing. `:wq` saves and quits.
+
+```
+i         insert mode (type text)
+Esc       back to normal mode
+:w        save
+:q        quit
+:wq       save and quit
+:q!       quit without saving
+```
+</Level>
+
+<Level show="medium">
+**The four main modes**
+
+| Mode | How to enter | What it's for |
+|------|-------------|--------------|
+| Normal | `Esc` (always) | Navigate, delete, copy, paste |
+| Insert | `i`, `a`, `o` | Type text |
+| Visual | `v`, `V`, `Ctrl+v` | Select text |
+| Command | `:` | Save, quit, search, settings |
+
+**Normal mode — navigation**
+
+```
+h j k l       ← ↓ ↑ →
+w / b         next / prev word
+e             end of word
+0 / ^         start of line (column 0 / first non-blank)
+$             end of line
+gg / G        first / last line
+:42           go to line 42
+Ctrl+d / u    half-page down / up
+%             jump to matching bracket
+```
+
+**Normal mode — editing**
+
+```
+x             delete character under cursor
+dd            delete line
+d2j           delete 2 lines down
+dw            delete word
+D             delete to end of line
+yy            yank (copy) line
+p / P         paste after / before cursor
+u             undo
+Ctrl+r        redo
+.             repeat last change
+```
+
+**Insert mode entry points**
+
+```
+i   insert before cursor
+a   insert after cursor
+o   new line below + insert
+O   new line above + insert
+I   insert at start of line
+A   insert at end of line
+```
+
+**Search and replace**
+
+```
+/pattern      search forward (n = next, N = prev)
+?pattern      search backward
+*             search word under cursor
+:s/old/new/   replace first on current line
+:s/old/new/g  replace all on current line
+:%s/old/new/g replace all in file
+:%s/old/new/gc replace with confirmation
+```
+</Level>
+
+<Level show="long">
+**Text objects — the key to efficient editing**
+
+The pattern in Vim is: `[operator][text object]`. Text objects describe a logical unit of text.
+
+```
+ciw   change inner word  (delete word, enter insert mode)
+ci"   change inside quotes
+ci(   change inside parentheses
+ca[   change around brackets (includes the brackets)
+dip   delete inner paragraph
+yit   yank inner HTML tag
+vis   visually select inner sentence
+```
+
+These work with any operator: `d` (delete), `c` (change), `y` (yank), `v` (visual select), `=` (indent).
+
+**Counts**
+
+Almost every command accepts a count: `3dd` deletes 3 lines, `5w` moves 5 words forward, `d3w` deletes 3 words.
+
+**Marks**
+
+```
+ma        set mark 'a' at current position
+'a        jump to line of mark 'a'
+`a        jump to exact position of mark 'a'
+''        jump back to last position
+```
+
+**Macros**
+
+Record a sequence of commands and replay them:
+```
+qq        start recording into register q
+...       perform actions
+q         stop recording
+@q        replay macro q
+10@q      replay 10 times
+@@        replay last macro
+```
+
+**Buffers, windows, tabs**
+
+```
+:e file       open file in current buffer
+:ls           list all open buffers
+:b3           switch to buffer 3
+:bn / :bp     next / previous buffer
+:bd           close buffer
+
+:sp file      horizontal split
+:vsp file     vertical split
+Ctrl+w h/j/k/l  move between panes
+Ctrl+w =      equalise pane sizes
+:q            close current pane
+
+:tabnew file  open in new tab
+gt / gT       next / previous tab
+```
+
+**Command-line mode power**
+
+```
+:set number         show line numbers
+:set relativenumber relative line numbers
+:set ignorecase     case-insensitive search
+:set smartcase      case-sensitive if uppercase used
+:syntax on          enable syntax highlighting
+:set tabstop=2      tab = 2 spaces
+:noh                clear search highlight
+```
+
+**Useful global commands**
+
+```
+:g/pattern/d        delete all lines matching pattern
+:g/^$/d             delete all blank lines
+:g/pattern/y A      yank all matching lines into register A
+:v/pattern/d        delete all lines NOT matching (inverse grep)
+```
+
+**Basic `.vimrc` for sane defaults**
+
+```vim
+set number
+set relativenumber
+set ignorecase
+set smartcase
+set incsearch
+set hlsearch
+set tabstop=2
+set shiftwidth=2
+set expandtab
+set autoindent
+set nowrap
+set backspace=indent,eol,start
+set clipboard=unnamed
+```
+
+**Neovim**
+
+`nvim` is the modern fork of Vim with Lua config, LSP support, and a plugin ecosystem. The modal editing model is identical — everything in this page applies to neovim.
+</Level>

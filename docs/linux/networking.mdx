@@ -1,0 +1,201 @@
+---
+title: Linux Networking
+sidebar_label: Networking
+sidebar_position: 4
+tutorials:
+  - label: "curl everything you need to know"
+    url: https://everything.curl.dev/
+  - label: "Linux networking commands (DigitalOcean)"
+    url: https://www.digitalocean.com/community/tutorials/linux-networking-tools
+---
+
+# Linux Networking
+
+<Level show="short">
+```bash
+curl https://example.com             # HTTP GET
+curl -X POST -d '{"k":"v"}' -H "Content-Type: application/json" URL
+ss -tlnp                             # listening TCP ports + processes
+dig example.com                      # DNS lookup
+ping -c 4 example.com                # reachability test
+```
+</Level>
+
+<Level show="medium">
+**curl — HTTP from the command line**
+
+```bash
+curl https://api.example.com/users              # GET
+curl -s https://...                             # silent (no progress)
+curl -o file.zip https://...                    # save to file
+curl -L https://...                             # follow redirects
+curl -I https://...                             # headers only (HEAD)
+
+# POST with JSON
+curl -X POST https://api.example.com/users \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"Alice","email":"a@example.com"}'
+
+# Upload file
+curl -F "file=@report.pdf" https://upload.example.com
+
+# Show response status code
+curl -o /dev/null -s -w "%{http_code}" https://example.com
+
+# With verbose output (headers, TLS handshake)
+curl -v https://example.com
+```
+
+**ss / netstat — port and socket inspection**
+
+```bash
+ss -tlnp          # TCP listening ports + process name
+ss -ulnp          # UDP listening
+ss -a             # all sockets (listening + established)
+ss -tnp           # established TCP connections
+ss -s             # summary statistics
+
+# Old-style (netstat still works on most systems)
+netstat -tlnp
+netstat -an | grep ESTABLISHED | wc -l   # count active connections
+```
+
+**DNS tools**
+
+```bash
+dig example.com                   # full DNS response
+dig example.com A                 # A records only
+dig example.com MX                # mail records
+dig @8.8.8.8 example.com         # query specific nameserver
+dig +short example.com            # just the IP
+nslookup example.com              # simpler alternative
+host example.com                  # quick lookup
+```
+
+**ping and traceroute**
+
+```bash
+ping -c 4 example.com             # 4 packets
+ping -i 0.2 example.com           # 0.2s interval
+traceroute example.com            # hop-by-hop path
+mtr example.com                   # live traceroute (install separately)
+```
+</Level>
+
+<Level show="long">
+**curl advanced**
+
+```bash
+# Time each phase of a request
+curl -o /dev/null -s -w \
+  "dns:%{time_namelookup}s connect:%{time_connect}s \
+   tls:%{time_appconnect}s total:%{time_total}s\n" \
+  https://api.example.com
+
+# Retry on failure
+curl --retry 5 --retry-delay 2 --retry-connrefused https://...
+
+# Proxy
+curl -x http://proxy.example.com:8080 https://...
+curl --noproxy "localhost,127.0.0.1" https://...
+
+# Certificate verification
+curl --cacert /etc/ssl/custom-ca.crt https://internal.example.com
+curl -k https://...    # skip verification (dangerous in production)
+
+# Cookies
+curl -c cookies.txt -b cookies.txt https://...
+
+# Rate limiting test
+for i in {1..100}; do curl -s -o /dev/null -w "%{http_code}\n" https://api; done | sort | uniq -c
+```
+
+**iptables / nftables — packet filtering**
+
+```bash
+# View current rules
+iptables -L -n -v                        # filter table (in/out/forward)
+iptables -t nat -L -n -v                 # NAT table
+
+# Allow specific port
+iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+
+# Block IP
+iptables -A INPUT -s 10.0.0.5 -j DROP
+
+# Save rules (Debian/Ubuntu)
+iptables-save > /etc/iptables/rules.v4
+```
+
+Most modern distros prefer `nftables` and `firewalld` over raw iptables.
+
+**nc (netcat) — Swiss Army knife for TCP/UDP**
+
+```bash
+# Test if a port is open
+nc -zv example.com 443           # -z = don't send data, -v = verbose
+
+# Simple TCP server (listen and print incoming)
+nc -l 8080
+
+# Transfer a file
+# Receiver: nc -l 9999 > received.tar.gz
+# Sender:   nc receiver-host 9999 < file.tar.gz
+
+# Test an HTTP server manually
+nc example.com 80
+GET / HTTP/1.0
+Host: example.com
+[Enter twice]
+```
+
+**Network interfaces and routing**
+
+```bash
+ip addr                          # show interfaces and IPs
+ip addr show eth0                # specific interface
+ip link set eth0 up/down         # bring interface up/down
+ip route                         # routing table
+ip route add 10.0.0.0/8 via 192.168.1.1  # add route
+
+# Legacy (still widely used)
+ifconfig
+route -n
+```
+
+**TLS/SSL inspection**
+
+```bash
+# View certificate details
+openssl s_client -connect example.com:443 </dev/null 2>/dev/null | \
+  openssl x509 -noout -dates -subject
+
+# Check certificate expiry
+echo | openssl s_client -connect example.com:443 2>/dev/null | \
+  openssl x509 -noout -enddate
+
+# Test SMTP TLS
+openssl s_client -connect mail.example.com:587 -starttls smtp
+```
+
+**Bandwidth testing**
+
+```bash
+# iperf3 (requires server on the other end)
+iperf3 -s                    # server mode
+iperf3 -c server-ip          # client: test to server
+
+# Download speed test via curl
+curl -o /dev/null https://speedtest-server/100MB-file
+```
+
+**Common troubleshooting flow**
+
+1. `ping` — can the host be reached at all?
+2. `dig` / `nslookup` — is DNS resolving correctly?
+3. `nc -zv host port` — is the port open?
+4. `curl -v` — what does the HTTP exchange look like?
+5. `ss -tlnp` — is the service actually listening?
+6. `traceroute` / `mtr` — where is the packet getting dropped?
+</Level>
