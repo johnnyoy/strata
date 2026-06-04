@@ -1,0 +1,154 @@
+---
+title: Contributing a Topic
+sidebar_label: Contributing
+sidebar_position: 1
+---
+
+# Contributing a Topic
+
+Adding a new topic to Strata takes about 15 minutes once you have the content ready. This page walks through every step.
+
+## Checklist
+
+- [ ] Create `docs/your-topic/` with `_category_.json`
+- [ ] Write at least one `.mdx` page with all three depth levels
+- [ ] Add tutorial links to frontmatter
+- [ ] Add topic to the landing page (`src/pages/index.tsx`)
+- [ ] Add topic to the footer (`docusaurus.config.ts`)
+- [ ] Confirm `npm run build` passes with no errors
+
+---
+
+## 1. Create the folder and category file
+
+```
+docs/
+  your-topic/
+    _category_.json
+    first-page.mdx
+```
+
+`_category_.json` controls the sidebar label, position, and the URL of the category index page:
+
+```json
+{
+  "label": "Your Topic",
+  "position": 6,
+  "link": {
+    "type": "generated-index",
+    "slug": "/your-topic",
+    "description": "One sentence about what this topic covers."
+  }
+}
+```
+
+`position` sets the order in the sidebar (existing topics occupy 1–5). `slug` makes the category page reachable at `/docs/your-topic` — use the same value for the landing page and footer links.
+
+---
+
+## 2. Write the MDX page
+
+```mdx
+---
+title: Page Title
+sidebar_label: Short Label
+sidebar_position: 1
+tutorials:
+  - label: "Official documentation"
+    url: https://example.com/docs
+  - label: "Interactive tutorial"
+    url: https://example.com/learn
+---
+
+# Page Title
+
+<Level show="short">
+One-paragraph TL;DR. The single most important command or concept.
+</Level>
+
+<Level show="medium">
+Practical explanation. Cover the common case with working examples.
+Include a code block or two.
+</Level>
+
+<Level show="long">
+Full deep-dive. Explain the internals, edge cases, gotchas, and
+trade-offs. Tables, diagrams, and extended examples are welcome here.
+</Level>
+```
+
+### Rules for depth levels
+
+| Level | Goal | Typical length |
+|-------|------|----------------|
+| `short` | Quick reminder for someone who already knows the topic | 1–3 paragraphs or a short code block |
+| `medium` | Practical guide for someone doing the task right now | 1–2 pages |
+| `long` | Deep understanding; internals and edge cases | As long as needed |
+
+- All three levels are required on every page.
+- Content **replaces** across levels — it doesn't stack. Write each level as a standalone read.
+- `Level` and `Tutorials` are registered globally. You do not need to import them.
+
+### Tutorial links
+
+Add `tutorials` to the frontmatter and the "Go deeper" box renders automatically at the bottom of the page:
+
+```yaml
+tutorials:
+  - label: "Descriptive link label"
+    url: https://example.com
+```
+
+Aim for 2–4 links: official docs, an interactive resource, and a good written guide.
+
+---
+
+## 3. Register the topic on the landing page
+
+Open `src/pages/index.tsx` and add to the `TOPICS` array:
+
+```tsx
+{
+  name: 'Your Topic',
+  path: '/docs/your-topic',   // matches the slug in _category_.json
+  icon: '⚡',                  // emoji or short text (2–3 chars)
+  desc: 'One sentence describing what the topic covers.',
+},
+```
+
+---
+
+## 4. Add a footer link
+
+Open `docusaurus.config.ts` and add a link under the **Topics** footer column:
+
+```ts
+{label: 'Your Topic', to: '/docs/your-topic'},
+```
+
+---
+
+## 5. Verify the build
+
+```bash
+npm run build
+```
+
+A clean build with no errors means:
+- All internal links resolve
+- MDX compiles without syntax errors
+- TypeScript has no type errors
+
+If you see a broken-link error, check that the `slug` in `_category_.json` matches the `path` values you used in `index.tsx` and `docusaurus.config.ts`.
+
+---
+
+## Writing tips
+
+**Short level**: Write it last, after you know the topic well. One command plus one sentence of context is often enough.
+
+**Medium level**: Start with the practical "how", not the theoretical "what". Show working code before explaining it.
+
+**Long level**: This is where the "why" lives. Explain what happens under the hood, what breaks at scale, and what you'd tell a colleague debugging a production issue at 2am.
+
+**Tutorials**: Prefer primary sources (official docs) and high-quality interactive resources over random blog posts. Avoid links that require signup.

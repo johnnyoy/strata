@@ -1,0 +1,153 @@
+---
+title: Architecture
+sidebar_label: Architecture
+sidebar_position: 2
+---
+
+# Architecture
+
+This page explains how Strata's depth system works under the hood and how the pieces fit together.
+
+---
+
+## Overview
+
+```
+GitHub repo (MDX + React)
+       │  push to main
+       ▼
+GitHub Actions (.github/workflows/deploy.yml)
+       │  npm ci && npm run build
+       ▼
+GitHub Pages (static HTML/CSS/JS)
+```
+
+Strata is a static site. All depth-switching happens entirely in the browser with React — there is no server, no database, and no API.
+
+---
+
+## Depth system
+
+### DepthContext
+
+`src/context/DepthContext.tsx` is the single source of truth for the active depth level.
+
+```
+DepthContext
+  state: level = 'short' | 'medium' | 'long'
+  persists to: localStorage ('strata-depth')
+  SSR guard: typeof window !== 'undefined' before any localStorage access
+```
+
+The context is provided by `src/theme/Root.tsx`, which Docusaurus treats as a wrapper around the entire app. This means the depth selection is available on every page, including the landing page and any custom pages — not just doc pages.
+
+### Level component
+
+`src/components/Level.tsx` is a simple conditional render:
+
+```
+<Level show="medium">…</Level>
+  ↓
+renders children  ← if DepthContext.level === "medium"
+renders nothing   ← otherwise
+```
+
+When the user clicks the toggle, React re-renders the current page in-place. No navigation occurs. The transition is instant.
+
+### Global MDX registration
+
+`src/theme/MDXComponents.tsx` spreads the original MDX component map and adds `Level` and `Tutorials`. Because Docusaurus passes this map to every MDX file, those components are available everywhere without explicit imports.
+
+---
+
+## Component map
+
+```
+src/
+  context/
+    DepthContext.tsx       State + persistence
+  components/
+    Level.tsx              Conditional render by depth
+    DepthToggle.tsx        Pill-button UI (short / medium / long)
+    DepthToggleNavbarItem.tsx  Adapter: makes DepthToggle a valid navbar item
+    Tutorials.tsx          "Go deeper" link box
+  theme/                   Docusaurus swizzle targets
+    Root.tsx               Wraps <App> in <DepthProvider>
+    MDXComponents.tsx      Registers Level + Tutorials globally
+    NavbarItem/
+      ComponentTypes.tsx   Registers 'custom-depthToggle' navbar item type
+    DocItem/Footer/
+      index.tsx            Wraps the doc footer; renders <Tutorials> from frontmatter
+```
+
+### Swizzling
+
+Docusaurus "swizzling" is the mechanism for overriding or wrapping built-in theme components. Strata swizzles four targets:
+
+| File | Purpose |
+|------|---------|
+| `theme/Root.tsx` | Wrap the whole app in `<DepthProvider>` |
+| `theme/MDXComponents.tsx` | Register `Level` + `Tutorials` as global MDX components |
+| `theme/NavbarItem/ComponentTypes.tsx` | Register the `custom-depthToggle` navbar item type |
+| `theme/DocItem/Footer/index.tsx` | Inject tutorial links below doc page content |
+
+All swizzle files wrap (not replace) the original components, so Docusaurus upgrades continue to work with no manual merging.
+
+---
+
+## Content model
+
+```
+docs/
+  about.mdx               "How depth works" — top of sidebar
+  architecture.mdx        This file
+  contributing.mdx        How to add a topic
+  <topic>/
+    _category_.json       Sidebar label, position, index slug
+    <subtopic>.mdx        One page per subtopic
+```
+
+### Page frontmatter
+
+```yaml
+---
+title: Page Title
+sidebar_label: Short sidebar label
+sidebar_position: 1
+tutorials:
+  - label: "Link label"
+    url: https://example.com
+---
+```
+
+`tutorials` is the only custom frontmatter field. The `DocItem/Footer` swizzle reads it via Docusaurus's `useDoc()` hook and passes it to `<Tutorials>`.
+
+### Category index slugs
+
+Each `_category_.json` sets `"slug": "/topic-name"` inside the `link` block. This gives the generated index page a clean URL (`/docs/git`) instead of the default (`/docs/category/git`). The landing page and footer links use these slugs.
+
+---
+
+## Build and deploy
+
+The GitHub Actions workflow (`.github/workflows/deploy.yml`):
+
+1. Triggers on push to `main`
+2. Runs `npm ci` (deterministic install from `package-lock.json`)
+3. Runs `npm run build` (Docusaurus static build → `build/`)
+4. Uploads `build/` as a Pages artifact
+5. Deploys via `actions/deploy-pages`
+
+The `baseUrl` is `/strata/` and the `url` is `https://johnnyoy.github.io`, matching the GitHub Pages URL for this repo.
+
+---
+
+## Design decisions
+
+**Why Docusaurus?** Built-in dark mode, responsive sidebar, search-ready, and good TypeScript support. The swizzle system makes custom components composable without forking the theme.
+
+**Why replace (not stack) depth levels?** Stacking ("long includes medium includes short") creates awkward content constraints — the short version would always have to be the literal opening of the medium version. Replace gives each level a clean, purpose-written read.
+
+**Why localStorage (not URL params)?** A depth in the URL would change on every navigation and leak into shared links. localStorage keeps it a personal preference without polluting the address bar.
+
+**Why register Level globally?** Importing `Level` in every MDX file is friction that leads to inconsistency. Global registration via `MDXComponents.tsx` is the idiomatic Docusaurus pattern for components used on every page.
