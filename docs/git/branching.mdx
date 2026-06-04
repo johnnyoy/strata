@@ -1,0 +1,80 @@
+---
+title: Git Branching
+sidebar_label: Branching
+sidebar_position: 1
+tutorials:
+  - label: "Atlassian: Git Branching"
+    url: https://www.atlassian.com/git/tutorials/using-branches
+  - label: "Pro Git Book: Branching"
+    url: https://git-scm.com/book/en/v2/Git-Branching-Branches-in-a-Nutshell
+  - label: "Learn Git Branching (interactive)"
+    url: https://learngitbranching.js.org/
+---
+
+# Git Branching
+
+<Level show="short">
+A **branch** is a lightweight movable pointer to a commit. Create one to work on a feature in isolation, then merge it back when done.
+
+```bash
+git checkout -b my-feature   # create + switch
+git checkout main            # switch back
+git merge my-feature         # merge
+git branch -d my-feature     # delete
+```
+</Level>
+
+<Level show="medium">
+Git branches are just named pointers to commits — they're cheap to create and fast to switch between. The default branch is usually `main` (or `master` in older repos).
+
+**Common workflow**
+
+```bash
+# Start a feature
+git checkout -b feature/login
+
+# Work, commit
+git add .
+git commit -m "Add login form"
+
+# Keep up with main
+git fetch origin
+git rebase origin/main
+
+# Merge when done
+git checkout main
+git merge --no-ff feature/login
+git branch -d feature/login
+```
+
+**Key concepts**
+- `HEAD` is where you are now — usually the tip of the current branch.
+- `--no-ff` (no fast-forward) creates an explicit merge commit, preserving history of the feature.
+- `git rebase` replays your commits on top of the target branch for a cleaner history. Use it for local cleanup; avoid force-pushing rebased commits others have pulled.
+</Level>
+
+<Level show="long">
+Under the hood, a Git branch is simply a 40-byte file in `.git/refs/heads/` containing a SHA-1 hash. Switching branches updates the `.git/HEAD` file to point to a different ref (or directly to a commit in "detached HEAD" state).
+
+**Merge vs Rebase**
+
+| | Merge | Rebase |
+|---|---|---|
+| History | Preserves fork point | Linearises history |
+| Conflicts | Once at merge time | Once per replayed commit |
+| Safe to share | Always | Only before others pull |
+
+**Three-way merge**: Git finds the common ancestor of the two branch tips and applies both diffs. If the same lines changed on both sides, you get a conflict.
+
+**Fast-forward merge**: When the target branch hasn't diverged, Git just moves the pointer forward — no merge commit. Use `--no-ff` to force a merge commit when you want a record of the integration.
+
+**Detached HEAD**: Checking out a commit (not a branch) puts you in detached HEAD. Commits here aren't referenced by any branch and will be garbage-collected eventually. Create a branch to keep them: `git checkout -b rescue-branch`.
+
+**Tracking branches**: `git checkout -b feature origin/feature` sets up a local branch that tracks the remote. `git push -u origin feature` does the same on push.
+
+**Interactive rebase**: `git rebase -i HEAD~5` lets you squash, reword, reorder, or drop the last 5 commits before sharing them. Great for cleaning up a messy local history.
+
+**Cherry-pick**: `git cherry-pick <sha>` copies a single commit onto the current branch — useful for backporting a fix to a release branch without merging everything.
+
+**Stash**: If you need to switch branches with uncommitted work, `git stash` saves it, `git stash pop` restores it. Use `git stash list` to manage multiple stashes.
+</Level>

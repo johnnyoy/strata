@@ -1,0 +1,122 @@
+import React from 'react';
+import Link from '@docusaurus/Link';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import Layout from '@theme/Layout';
+import styles from './index.module.css';
+
+const TOPICS = [
+  {
+    name: 'Git',
+    path: '/docs/git',
+    icon: '⎇',
+    desc: 'Branching, commits, rebase, and collaborating with remotes.',
+  },
+  {
+    name: 'Docker',
+    path: '/docs/docker',
+    icon: '🐳',
+    desc: 'Containers, images, Dockerfiles, and multi-service networking.',
+  },
+  {
+    name: 'Linux',
+    path: '/docs/linux',
+    icon: '🐧',
+    desc: 'Permissions, processes, the shell, and system internals.',
+  },
+  {
+    name: 'JavaScript',
+    path: '/docs/javascript',
+    icon: 'JS',
+    desc: 'Async/await, the event loop, closures, and modern patterns.',
+  },
+  {
+    name: 'SQL',
+    path: '/docs/sql',
+    icon: '⊏⊐',
+    desc: 'Queries, joins, indexes, window functions, and transactions.',
+  },
+];
+
+function Hero() {
+  return (
+    <div className={styles.hero}>
+      <div className={styles.heroInner}>
+        <div className={styles.badge}>Short · Medium · Long</div>
+        <h1 className={styles.heroTitle}>
+          Docs at the depth<br />you choose.
+        </h1>
+        <p className={styles.heroSubtitle}>
+          Strata is a technical reference where every topic has three levels of
+          detail. Toggle between <strong>short</strong> (quick reminder),{' '}
+          <strong>medium</strong> (practical guide), or <strong>long</strong>{' '}
+          (full deep-dive) — site-wide, instantly.
+        </p>
+        <div className={styles.heroCta}>
+          <Link className="button button--primary button--lg" to="/docs/git">
+            Browse topics
+          </Link>
+          <Link className="button button--outline button--lg" to="/docs/about">
+            How depth works
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TopicCard({name, path, icon, desc}: (typeof TOPICS)[0]) {
+  return (
+    <Link to={path} className={styles.card}>
+      <div className={styles.cardIcon}>{icon}</div>
+      <div>
+        <div className={styles.cardName}>{name}</div>
+        <div className={styles.cardDesc}>{desc}</div>
+      </div>
+    </Link>
+  );
+}
+
+export default function Home() {
+  const {siteConfig} = useDocusaurusContext();
+  return (
+    <Layout title={siteConfig.title} description={siteConfig.tagline}>
+      <Hero />
+      <main className={styles.main}>
+        <section className={styles.topicsSection}>
+          <h2 className={styles.sectionTitle}>Topics</h2>
+          <div className={styles.grid}>
+            {TOPICS.map((t) => (
+              <TopicCard key={t.name} {...t} />
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.depthSection}>
+          <div className={styles.depthBox}>
+            <h2 className={styles.depthTitle}>One toggle. Every page.</h2>
+            <p>
+              Use the <strong>short / medium / long</strong> toggle in the top
+              navbar to control how much detail you see across the whole site.
+              Your choice is saved — so next time you visit, Strata opens at the
+              same depth.
+            </p>
+            <div className={styles.depthExamples}>
+              <div className={styles.depthExample}>
+                <span className={styles.depthLabel}>short</span>
+                <span>TL;DR — the commands or concept at a glance.</span>
+              </div>
+              <div className={styles.depthExample}>
+                <span className={styles.depthLabel}>medium</span>
+                <span>Practical explanation with real examples.</span>
+              </div>
+              <div className={styles.depthExample}>
+                <span className={styles.depthLabel}>long</span>
+                <span>Full deep-dive: internals, edge cases, gotchas.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </Layout>
+  );
+}

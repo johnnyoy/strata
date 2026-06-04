@@ -1,0 +1,54 @@
+---
+title: How Depth Works
+sidebar_label: About Strata
+sidebar_position: 0
+---
+
+# How Depth Works
+
+Strata is a technical documentation site with a single distinguishing feature: **every page has three versions of its content**.
+
+## The depth toggle
+
+In the top-right corner of every page you'll find three buttons:
+
+| Level | What you see |
+|-------|-------------|
+| **short** | A TL;DR — the key command, concept, or rule in a glance. Good for a quick reminder when you already know the topic. |
+| **medium** | A practical guide with real examples. The default. Works for most situations. |
+| **long** | A full deep-dive into internals, edge cases, gotchas, and the "why". Good when you're learning something new or debugging something subtle. |
+
+Click any level and the whole site switches — including pages you navigate to afterwards.
+
+Your choice is remembered in `localStorage`, so the site reopens at the depth you left it at.
+
+## How it works technically
+
+Each page is an MDX file. Content is wrapped in `<Level show="...">` components:
+
+```mdx
+<Level show="short">One paragraph TL;DR.</Level>
+<Level show="medium">Practical explanation with examples.</Level>
+<Level show="long">Full deep-dive.</Level>
+```
+
+A React context (`DepthContext`) holds the current level. The `Level` component renders its children only when the active level matches. The toggle writes the selection to `localStorage` and updates the context — React re-renders the page in-place.
+
+## Adding a topic
+
+1. Create a folder under `docs/` for the topic (e.g. `docs/kubernetes/`).
+2. Add a `_category_.json` to label it in the sidebar.
+3. Create `.mdx` files — one per subtopic.
+4. Wrap content in `<Level show="short">`, `<Level show="medium">`, `<Level show="long">`.
+5. Add `tutorials` to the frontmatter for curated links:
+
+```yaml
+---
+title: My Topic
+tutorials:
+  - label: "Official docs"
+    url: https://example.com
+---
+```
+
+The `<Tutorials>` component renders automatically at the bottom of the page — no manual insertion needed.

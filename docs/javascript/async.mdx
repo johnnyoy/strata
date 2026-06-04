@@ -1,0 +1,152 @@
+---
+title: JavaScript Async / Await
+sidebar_label: Async / Await
+sidebar_position: 1
+tutorials:
+  - label: "MDN: Promises"
+    url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises
+  - label: "MDN: async/await"
+    url: https://developer.mozilla.org/en-US/docs/Learn/JavaScript/Asynchronous/Promises
+  - label: "JavaScript.info: Async/await"
+    url: https://javascript.info/async-await
+---
+
+# JavaScript Async / Await
+
+<Level show="short">
+`async`/`await` lets you write asynchronous code that reads like synchronous code.
+
+```js
+async function fetchUser(id) {
+  const res = await fetch(`/api/users/${id}`);
+  const user = await res.json();
+  return user;
+}
+```
+Always wrap in `try/catch` for error handling.
+</Level>
+
+<Level show="medium">
+`async` functions always return a Promise. `await` pauses execution inside the function until the Promise resolves (but doesn't block the thread).
+
+**Pattern: fetch with error handling**
+
+```js
+async function getUser(id) {
+  try {
+    const res = await fetch(`/api/users/${id}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('Failed to fetch user:', err);
+    throw err;  // re-throw so callers can handle it
+  }
+}
+```
+
+**Parallel vs sequential**
+
+```js
+// Sequential (slower): each waits for the previous
+const a = await fetchA();
+const b = await fetchB();
+
+// Parallel (faster): both start immediately
+const [a, b] = await Promise.all([fetchA(), fetchB()]);
+```
+
+**Common patterns**
+
+```js
+// Loop over async operations
+for (const id of ids) {
+  const item = await fetchItem(id);  // sequential
+  process(item);
+}
+
+// All at once (parallel)
+const items = await Promise.all(ids.map(fetchItem));
+```
+</Level>
+
+<Level show="long">
+**The Event Loop**
+
+JavaScript is single-threaded. The event loop manages execution:
+1. Run synchronous code to completion (call stack)
+2. Process microtasks (Promise callbacks, `queueMicrotask`)
+3. Process macrotasks (setTimeout, setInterval, I/O callbacks)
+4. Render (in browsers) — then back to step 1
+
+`await` suspends the current async function, returning control to the event loop. When the awaited Promise settles, the continuation is scheduled as a microtask.
+
+**Promise internals**
+
+A Promise is a state machine: `pending` → `fulfilled` or `rejected`. `.then()` and `.catch()` register callbacks. `async/await` is syntactic sugar over `.then()` chains:
+
+```js
+// These are equivalent
+async function f() {
+  const x = await g();
+  return x + 1;
+}
+
+function f() {
+  return g().then((x) => x + 1);
+}
+```
+
+**Error propagation**
+
+Unhandled promise rejections crash Node.js processes (since v15) and trigger warnings in browsers. Always either:
+- `await` inside `try/catch`
+- Chain `.catch()` at the call site
+- Use a top-level error handler (`process.on('unhandledRejection', ...)`)
+
+**Promise combinators**
+
+| Method | Resolves when | Rejects when |
+|--------|---------------|--------------|
+| `Promise.all` | All resolve | Any rejects |
+| `Promise.allSettled` | All settle (any) | Never |
+| `Promise.race` | First settles | First rejects |
+| `Promise.any` | First resolves | All reject |
+
+**AbortController** — cancellation
+
+```js
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 5000);
+
+try {
+  const res = await fetch('/api/slow', {signal: controller.signal});
+  const data = await res.json();
+} catch (err) {
+  if (err.name === 'AbortError') console.log('Request cancelled');
+  else throw err;
+}
+```
+
+**Async iterators**
+
+```js
+async function* paginate(url) {
+  let next = url;
+  while (next) {
+    const res = await fetch(next);
+    const {items, nextUrl} = await res.json();
+    yield* items;
+    next = nextUrl;
+  }
+}
+
+for await (const item of paginate('/api/items')) {
+  process(item);
+}
+```
+
+**Common pitfalls**
+- `await` inside `forEach` doesn't work — `forEach` ignores returned Promises. Use `for...of` or `Promise.all(arr.map(...))`.
+- `try/catch` around an `async` function call without `await` won't catch async errors — the rejected Promise is unhandled.
+- Creating Promises in tight loops without limiting concurrency can overwhelm downstream services — use a concurrency limiter (e.g., `p-limit`).
+</Level>

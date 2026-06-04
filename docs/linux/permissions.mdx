@@ -1,0 +1,120 @@
+---
+title: Linux File Permissions
+sidebar_label: Permissions
+sidebar_position: 1
+tutorials:
+  - label: "Linux Permissions Explained (DigitalOcean)"
+    url: https://www.digitalocean.com/community/tutorials/linux-permissions-basics-and-how-to-use-umask-on-a-vps
+  - label: "chmod calculator"
+    url: https://chmodcommand.com/
+---
+
+# Linux File Permissions
+
+<Level show="short">
+Every file has **read (r)**, **write (w)**, **execute (x)** for three classes: **owner**, **group**, **others**.
+
+```bash
+ls -l file.sh        # -rwxr-xr--  owner=rwx group=r-x others=r--
+chmod 755 file.sh    # rwxr-xr-x (octal)
+chmod +x script.sh   # add execute for all
+chown alice file     # change owner
+```
+</Level>
+
+<Level show="medium">
+Permissions are shown as three triplets in `ls -l`:
+
+```
+-rwxr-xr--
+│└──┴──┴──  user / group / other permissions
+└ file type (- file, d dir, l symlink)
+```
+
+**Octal notation**
+
+| Symbol | Octal | Meaning |
+|--------|-------|---------|
+| `r` | 4 | read |
+| `w` | 2 | write |
+| `x` | 1 | execute |
+
+Add the values: `rwx` = 7, `r-x` = 5, `r--` = 4. So `chmod 754` = `rwxr-xr--`.
+
+**Common patterns**
+
+```bash
+chmod 644 file.txt    # rw-r--r--  (public read, owner write)
+chmod 755 script.sh   # rwxr-xr-x  (executable by all)
+chmod 700 private/    # rwx------  (owner only)
+chmod -R 755 dir/     # recursive
+```
+
+**Ownership**
+
+```bash
+chown alice file           # change owner
+chown alice:devs file      # owner + group
+chown -R alice:devs dir/   # recursive
+```
+
+**Special bits**: `setuid` (4), `setgid` (2), `sticky` (1) can be prepended: `chmod 2755` adds setgid.
+</Level>
+
+<Level show="long">
+**Inode and permission storage**
+
+Permissions are stored in the file's **inode** alongside metadata like timestamps and owner UIDs/GIDs. The inode does *not* store the filename — that's in the directory entry (dentry). So `chmod` and `chown` affect the inode; renaming a file only updates the dentry.
+
+**setuid, setgid, sticky**
+
+| Bit | On file | On directory |
+|-----|---------|-------------|
+| setuid (4) | Process runs as file owner | (ignored on Linux) |
+| setgid (2) | Process runs as file group | New files inherit directory's group |
+| sticky (1) | (historical) | Only owner can delete their files (e.g., `/tmp`) |
+
+```bash
+chmod u+s /usr/bin/passwd   # setuid — runs as root
+chmod g+s /shared/           # setgid dir — all new files get "shared" group
+chmod +t /tmp                # sticky
+ls -la /usr/bin/passwd       # -rwsr-xr-x (s = setuid)
+```
+
+**ACLs (Access Control Lists)**
+
+Standard Unix permissions allow only one owner and one group. For finer control, use ACLs (requires `acl` package and filesystem support):
+
+```bash
+setfacl -m u:bob:rw file.txt     # give bob rw access
+setfacl -m g:devs:r file.txt     # give devs group read
+getfacl file.txt                  # show ACL
+setfacl -x u:bob file.txt        # remove bob's ACL entry
+```
+
+Files with ACLs show a `+` in `ls -l`.
+
+**umask**
+
+`umask` sets the *subtracted* permissions for new files. Default is `022`, meaning new files get `644` (666 - 022) and new dirs get `755` (777 - 022).
+
+```bash
+umask          # show current
+umask 027      # files: 640, dirs: 750
+```
+
+**Capabilities**
+
+Linux capabilities split root privileges into ~40 distinct abilities. Instead of setuid-root, grant only what a binary needs:
+
+```bash
+getcap /usr/bin/ping          # cap_net_raw=ep
+setcap cap_net_bind_service=+ep /usr/local/bin/node  # bind ports < 1024
+```
+
+This is the principle of least privilege at the binary level.
+
+**Namespace and container implications**
+
+Inside Docker, the process may run as root *inside the container* but maps to a non-root UID on the host via user namespaces (if configured). The host filesystem permissions still govern what the bind-mounted path is accessible.
+</Level>

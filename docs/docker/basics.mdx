@@ -1,0 +1,139 @@
+---
+title: Docker Basics
+sidebar_label: Basics
+sidebar_position: 1
+tutorials:
+  - label: "Docker Official Getting Started"
+    url: https://docs.docker.com/get-started/
+  - label: "Play with Docker (browser sandbox)"
+    url: https://labs.play-with-docker.com/
+  - label: "Docker Curriculum (comprehensive tutorial)"
+    url: https://docker-curriculum.com/
+---
+
+# Docker Basics
+
+<Level show="short">
+Docker packages apps into **containers** — portable, isolated units that run the same everywhere.
+
+```bash
+docker run hello-world          # test installation
+docker run -p 8080:80 nginx     # run nginx, map port
+docker ps                       # list running containers
+docker images                   # list local images
+```
+</Level>
+
+<Level show="medium">
+A Docker **image** is a read-only template (layers of filesystem changes). A **container** is a running instance of an image with its own writable layer.
+
+**Essential commands**
+
+```bash
+# Images
+docker pull ubuntu:22.04         # download image
+docker images                    # list local images
+docker rmi ubuntu:22.04          # remove image
+
+# Containers
+docker run -it ubuntu bash       # interactive shell
+docker run -d -p 8080:80 nginx   # detached, port mapped
+docker ps -a                     # all containers (incl. stopped)
+docker stop <id>                 # stop container
+docker rm <id>                   # remove container
+
+# Inspect
+docker logs <id>                 # container stdout/stderr
+docker exec -it <id> bash        # shell into running container
+```
+
+**Dockerfile basics**
+
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+EXPOSE 3000
+CMD ["node", "server.js"]
+```
+
+Build: `docker build -t myapp:1.0 .`
+Run: `docker run -p 3000:3000 myapp:1.0`
+</Level>
+
+<Level show="long">
+**How containers work**
+
+Containers are not VMs. They share the host kernel and use Linux primitives:
+- **Namespaces** — isolate PID, network, mount, UTS, IPC, user spaces
+- **cgroups** — limit CPU, memory, I/O
+- **Union filesystem (OverlayFS)** — layers images efficiently; only diffs are stored
+
+**Image layers**
+
+Each `RUN`, `COPY`, and `ADD` instruction in a Dockerfile creates a new layer. Layers are cached: if a layer hasn't changed, Docker reuses it. Structure your Dockerfile from least-to-most-changed (dependencies first, code last) to maximise cache hits.
+
+```dockerfile
+# Bad: invalidates cache on any source change
+COPY . .
+RUN npm ci
+
+# Good: npm ci layer cached as long as package.json unchanged
+COPY package*.json ./
+RUN npm ci
+COPY . .
+```
+
+**Multi-stage builds** keep final images lean:
+
+```dockerfile
+FROM node:20 AS builder
+WORKDIR /app
+COPY . .
+RUN npm ci && npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+```
+
+The final image only contains the nginx stage — no Node.js, no source, no dev dependencies.
+
+**Networking**
+
+- `bridge` (default) — containers on the same bridge can talk by IP; use `--network` to create named bridges where containers can resolve each other by name.
+- `host` — container shares the host network stack (Linux only).
+- `none` — no networking.
+
+```bash
+docker network create mynet
+docker run --network mynet --name db postgres
+docker run --network mynet myapp   # myapp can reach db at hostname "db"
+```
+
+**Volumes vs bind mounts**
+
+| | Volume | Bind mount |
+|---|---|---|
+| Location | Docker-managed (`/var/lib/docker/volumes/`) | Any host path |
+| Portability | High | Low |
+| Backup | `docker volume` commands | Host filesystem |
+| Use case | DB data, persistent state | Dev hot-reload, config files |
+
+```bash
+docker run -v mydata:/var/lib/postgresql/data postgres   # named volume
+docker run -v $(pwd):/app node                           # bind mount
+```
+
+**Resource limits** (always set in production):
+
+```bash
+docker run --memory 512m --cpus 1.5 myapp
+```
+
+**Common gotchas**
+- PID 1 in containers should handle signals correctly — use `tini` or the `exec` form of CMD.
+- Build context size: `.dockerignore` is essential (exclude `node_modules`, `.git`, build artifacts).
+- Never store secrets in images — they end up in layers. Use `--secret` (BuildKit) or environment variables injected at runtime.
+</Level>

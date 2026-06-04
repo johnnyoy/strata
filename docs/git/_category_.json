@@ -1,0 +1,9 @@
+{
+  "label": "Git",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "slug": "/git",
+    "description": "Version control with Git — branching, committing, and collaborating."
+  }
+}

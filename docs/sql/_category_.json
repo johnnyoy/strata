@@ -1,0 +1,9 @@
+{
+  "label": "SQL",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "slug": "/sql",
+    "description": "SQL and relational databases — queries, indexes, and transactions."
+  }
+}

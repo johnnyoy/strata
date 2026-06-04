@@ -1,0 +1,86 @@
+---
+title: Git Commits
+sidebar_label: Commits
+sidebar_position: 2
+tutorials:
+  - label: "Conventional Commits specification"
+    url: https://www.conventionalcommits.org/
+  - label: "Pro Git: Recording Changes"
+    url: https://git-scm.com/book/en/v2/Git-Basics-Recording-Changes-to-the-Repository
+---
+
+# Git Commits
+
+<Level show="short">
+A commit is a snapshot of your repo at a point in time. Stage changes with `git add`, then snapshot with `git commit`.
+
+```bash
+git add -p                   # stage interactively
+git commit -m "feat: add X"  # commit with message
+git log --oneline            # view history
+```
+</Level>
+
+<Level show="medium">
+Each commit stores a full snapshot (not a diff), a pointer to its parent(s), author info, timestamp, and your message. Git compresses duplicated content, so snapshots are storage-efficient.
+
+**Staging area (index)**
+
+The index sits between your working tree and the repo. `git add` moves changes to the index; `git commit` writes the index to the object store.
+
+```bash
+git add file.txt          # stage one file
+git add -p                # stage hunks interactively
+git reset HEAD file.txt   # unstage a file
+git diff --cached         # diff between index and last commit
+```
+
+**Writing good messages**
+
+- Subject line ≤ 72 characters, imperative mood ("Add login", not "Added login")
+- Blank line, then body explaining *why*, not *what*
+- Reference issue numbers (`Closes #42`)
+
+**Amending**
+
+`git commit --amend` rewrites the last commit (message or content). Safe to do before pushing; destructive after others have pulled.
+</Level>
+
+<Level show="long">
+**Git objects**
+
+Everything in Git is an object identified by its SHA-1 hash:
+- **Blob** — file content (no name, no metadata)
+- **Tree** — directory listing (names + modes + blob/tree hashes)
+- **Commit** — tree hash + parent hash(es) + author + message
+- **Tag** — annotated pointer to a commit
+
+```
+commit d3b4...
+  tree  8a2f...
+  parent 91cc...
+  author Alice <a@example.com> 1717500000 +0000
+  committer Alice <a@example.com> 1717500000 +0000
+
+  feat: implement OAuth login
+```
+
+**Merkle tree integrity**: Because each commit hashes its contents *including the parent hash*, you cannot alter any commit without changing all subsequent hashes. This makes Git history tamper-evident.
+
+**Pack files**: Initially each object is a "loose" file. `git gc` runs periodically and packs objects together with delta compression, drastically reducing repo size for repos with many similar file versions.
+
+**Reflog**: Every time HEAD moves, Git records it in `.git/logs/`. `git reflog` shows the last 90 days of HEAD positions — invaluable for recovering from accidental resets or bad rebases.
+
+```bash
+git reflog           # list recent HEAD positions
+git checkout HEAD@{3}  # go back 3 HEAD moves
+```
+
+**Signing commits**: `git commit -S` signs with your GPG key. GitHub shows a "Verified" badge. Useful for supply-chain integrity on open-source projects.
+
+**Commit graph shorthand**:
+- `HEAD~1` — one commit before HEAD
+- `HEAD^2` — second parent of a merge commit
+- `main..feature` — commits reachable from feature but not main
+- `main...feature` — commits reachable from either but not both (symmetric difference)
+</Level>

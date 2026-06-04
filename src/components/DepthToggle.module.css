@@ -1,0 +1,45 @@
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--ifm-color-emphasis-200);
+  border-radius: 20px;
+  padding: 3px;
+}
+
+.btn {
+  background: none;
+  border: none;
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--ifm-color-emphasis-700);
+  transition: background 0.15s, color 0.15s;
+  text-transform: capitalize;
+  letter-spacing: 0.02em;
+}
+
+.btn:hover {
+  color: var(--ifm-color-primary);
+}
+
+.btn.active {
+  background: var(--ifm-color-primary);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme='dark'] .toggle {
+  background: var(--ifm-color-emphasis-300);
+}
+
+[data-theme='dark'] .btn {
+  color: var(--ifm-color-emphasis-600);
+}
+
+[data-theme='dark'] .btn.active {
+  background: var(--ifm-color-primary);
+  color: #fff;
+}
