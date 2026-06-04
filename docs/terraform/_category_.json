@@ -1,0 +1,9 @@
+{
+  "label": "Terraform",
+  "position": 10,
+  "link": {
+    "type": "generated-index",
+    "slug": "/terraform",
+    "description": "Infrastructure as code with Terraform — providers, resources, state management, and reusable modules."
+  }
+}

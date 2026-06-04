@@ -1,0 +1,200 @@
+---
+title: TypeScript Generics
+sidebar_label: Generics
+sidebar_position: 2
+tutorials:
+  - label: "TypeScript handbook — Generics"
+    url: https://www.typescriptlang.org/docs/handbook/2/generics.html
+  - label: "TypeScript handbook — Utility types"
+    url: https://www.typescriptlang.org/docs/handbook/utility-types.html
+  - label: "Type challenges"
+    url: https://github.com/type-challenges/type-challenges
+---
+
+# TypeScript Generics
+
+<Level show="short">
+Generics let a function or type work with multiple types while staying type-safe.
+
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
+}
+
+first([1, 2, 3]);        // number | undefined
+first(["a", "b"]);       // string | undefined
+
+// Built-in utility types
+type User = { name: string; age: number; email: string };
+type Preview  = Pick<User, "name" | "email">;
+type NoEmail  = Omit<User, "email">;
+type Optional = Partial<User>;
+```
+</Level>
+
+<Level show="medium">
+**Generic functions**
+
+```ts
+// Basic
+function wrap<T>(value: T): { value: T } {
+  return { value };
+}
+
+// Constraints — T must have a .length property
+function longest<T extends { length: number }>(a: T, b: T): T {
+  return a.length >= b.length ? a : b;
+}
+longest("abc", "de");       // string
+longest([1, 2], [3]);       // number[]
+
+// Multiple type params
+function zip<T, U>(ts: T[], us: U[]): [T, U][] {
+  return ts.map((t, i) => [t, us[i]]);
+}
+zip([1, 2], ["a", "b"]);   // [number, string][]
+```
+
+**Built-in utility types**
+
+```ts
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+}
+
+type PartialUser    = Partial<User>;          // all optional
+type RequiredUser   = Required<PartialUser>;  // all required
+type ReadonlyUser   = Readonly<User>;         // all readonly
+type UserPreview    = Pick<User, "id" | "name">;
+type NoEmail        = Omit<User, "email">;
+type IdOrName       = Pick<User, "id" | "name">;
+
+// Record — build an object type from keys + value type
+type Flags = Record<string, boolean>;
+type UserMap = Record<number, User>;
+
+// Extract / Exclude — filter union members
+type Role = "admin" | "user" | "guest";
+type PrivilegedRole  = Extract<Role, "admin" | "user">;  // "admin" | "user"
+type NonAdminRole    = Exclude<Role, "admin">;           // "user" | "guest"
+
+// ReturnType / Parameters — introspect functions
+function fetchUser(id: number): Promise<User> { ... }
+type FetchReturn = ReturnType<typeof fetchUser>;     // Promise<User>
+type FetchParams = Parameters<typeof fetchUser>;     // [id: number]
+
+// Awaited — unwrap promises (recursive)
+type ResolvedUser = Awaited<Promise<Promise<User>>>;  // User
+```
+
+**`keyof` and `typeof`**
+
+```ts
+type UserKey = keyof User;   // "id" | "name" | "email" | "role"
+
+function getField<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+const user: User = { id: 1, name: "alice", email: "a@b.com", role: "admin" };
+getField(user, "name");  // string
+getField(user, "id");    // number
+
+// typeof — capture type of a value
+const defaultConfig = { timeout: 5000, retries: 3, verbose: false };
+type Config = typeof defaultConfig;
+```
+</Level>
+
+<Level show="long">
+**Mapped types**
+
+```ts
+// Make all properties optional (how Partial<T> is implemented)
+type MyPartial<T> = { [K in keyof T]?: T[K] };
+
+// Make all properties mutable (remove readonly)
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
+// Make all properties required (remove ?)
+type MyRequired<T> = { [K in keyof T]-?: T[K] };
+
+// Remap keys with 'as'
+type Getters<T> = {
+  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K];
+};
+// Getters<{name: string}> = { getName: () => string }
+```
+
+**Conditional types**
+
+```ts
+// T extends U ? TrueType : FalseType
+type IsArray<T> = T extends any[] ? true : false;
+type A = IsArray<string[]>;  // true
+type B = IsArray<string>;    // false
+
+// Distributive conditional — applies across union members
+type Flatten<T> = T extends any[] ? T[number] : T;
+type F1 = Flatten<string[]>;            // string
+type F2 = Flatten<string | number[]>;   // string | number (distributed)
+```
+
+**`infer` — extract type from structure**
+
+```ts
+// Extract the element type of an array
+type ElementOf<T> = T extends (infer E)[] ? E : never;
+type E = ElementOf<string[]>;   // string
+
+// Extract the resolved type of a Promise
+type Unwrap<T> = T extends Promise<infer U> ? Unwrap<U> : T;
+type W = Unwrap<Promise<Promise<string>>>;  // string
+
+// Extract function parameter type
+type FirstParam<T> = T extends (first: infer P, ...rest: any[]) => any ? P : never;
+type P = FirstParam<(id: number, name: string) => void>;  // number
+```
+
+**Template literal types**
+
+```ts
+type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE";
+type Route = `/api/${string}`;
+type Endpoint = `${HTTPMethod} ${Route}`;
+// "GET /api/${string}" | "POST /api/${string}" | ...
+
+// Parsing string patterns
+type ExtractParam<S extends string> =
+  S extends `${infer _Start}:${infer Param}/${infer _Rest}`
+    ? Param | ExtractParam<_Rest>
+    : S extends `${infer _Start}:${infer Param}`
+    ? Param
+    : never;
+
+type Params = ExtractParam<"/users/:id/posts/:postId">;
+// "id" | "postId"
+```
+
+**Recursive types**
+
+```ts
+type JSONValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JSONValue[]
+  | { [key: string]: JSONValue };
+
+type DeepReadonly<T> =
+  T extends (infer U)[]
+    ? ReadonlyArray<DeepReadonly<U>>
+    : T extends object
+    ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+    : T;
+```
+</Level>

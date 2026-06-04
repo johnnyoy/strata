@@ -59,6 +59,36 @@ const TOPICS = [
     icon: '$_',
     desc: 'grep, vim, htop — the essential command-line tools explained.',
   },
+  {
+    name: 'Terraform',
+    path: '/docs/terraform',
+    icon: 'tf',
+    desc: 'Infrastructure as code — providers, resources, state, and modules.',
+  },
+  {
+    name: 'Python',
+    path: '/docs/python',
+    icon: '🐍',
+    desc: 'Data structures, comprehensions, async, and the standard library.',
+  },
+  {
+    name: 'GitHub Actions',
+    path: '/docs/github-actions',
+    icon: 'CI',
+    desc: 'CI/CD workflows — triggers, jobs, matrix builds, and reusable actions.',
+  },
+  {
+    name: 'Helm',
+    path: '/docs/helm',
+    icon: '⎈',
+    desc: 'Kubernetes package manager — charts, templating, and release lifecycle.',
+  },
+  {
+    name: 'TypeScript',
+    path: '/docs/typescript',
+    icon: 'TS',
+    desc: 'Static types for JavaScript — generics, utility types, and strict patterns.',
+  },
 ];
 
 function Hero() {

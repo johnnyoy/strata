@@ -1,0 +1,232 @@
+---
+title: Reusable Workflows
+sidebar_label: Reusable Workflows
+sidebar_position: 3
+tutorials:
+  - label: "Reusing workflows"
+    url: https://docs.github.com/en/actions/sharing-automations/reusing-workflows
+  - label: "Creating composite actions"
+    url: https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action
+  - label: "Environments and deployment protection"
+    url: https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment
+---
+
+# Reusable Workflows
+
+<Level show="short">
+**Composite action** — bundle steps into a reusable action called from any workflow.
+
+**Reusable workflow** — a complete `.yml` workflow file that other workflows call as a job.
+
+```yaml
+# Call a reusable workflow
+jobs:
+  deploy:
+    uses: my-org/shared-workflows/.github/workflows/deploy.yml@main
+    with:
+      environment: production
+    secrets: inherit
+```
+</Level>
+
+<Level show="medium">
+**Composite actions**
+
+A composite action lives in its own repo (or in `.github/actions/` of any repo) as `action.yml`:
+
+```yaml
+# .github/actions/setup-app/action.yml
+name: Setup App
+description: Install deps, cache, and configure environment
+
+inputs:
+  node-version:
+    description: Node.js version
+    default: "20"
+  registry-url:
+    description: NPM registry URL
+    required: false
+
+outputs:
+  cache-hit:
+    description: Whether npm cache was restored
+    value: ${{ steps.cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+
+    - run: npm ci
+      shell: bash
+```
+
+Use it in any workflow:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: ./.github/actions/setup-app   # local
+  - uses: my-org/shared/.github/actions/setup-app@v2  # remote
+    with:
+      node-version: "22"
+```
+
+**Reusable workflows**
+
+The called workflow must declare `on: workflow_call`:
+
+```yaml
+# .github/workflows/deploy-template.yml
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+    secrets:
+      DEPLOY_KEY:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - run: deploy --env ${{ inputs.environment }} --image ${{ inputs.image-tag }}
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+```
+
+Caller:
+
+```yaml
+jobs:
+  deploy-staging:
+    uses: my-org/shared/.github/workflows/deploy-template.yml@main
+    with:
+      environment: staging
+      image-tag: ${{ needs.build.outputs.image-tag }}
+    secrets:
+      DEPLOY_KEY: ${{ secrets.STAGING_DEPLOY_KEY }}
+
+  deploy-prod:
+    needs: deploy-staging
+    uses: my-org/shared/.github/workflows/deploy-template.yml@main
+    with:
+      environment: production
+      image-tag: ${{ needs.build.outputs.image-tag }}
+    secrets: inherit   # pass all caller secrets to called workflow
+```
+
+**Environments + protection rules**
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://my-app.com   # shown in the GitHub UI
+```
+
+Configure environment protection in Settings → Environments:
+- **Required reviewers** — manual approval before the job runs
+- **Wait timer** — delay before deployment proceeds
+- **Deployment branches** — restrict which branches can deploy
+</Level>
+
+<Level show="long">
+**Composite vs reusable workflow — when to use each**
+
+| | Composite Action | Reusable Workflow |
+|--|-----------------|-------------------|
+| Unit of reuse | Steps | Entire job |
+| Can span multiple jobs | No | Yes |
+| Can use services/containers | No | Yes |
+| Versioned independently | Yes (own repo/tag) | Yes |
+| Inputs/outputs | Yes | Yes (outputs via job outputs) |
+| Best for | Setup tasks, common step bundles | Full deployment pipelines |
+
+**Concurrency — preventing overlapping deploys**
+
+```yaml
+concurrency:
+  group: deploy-${{ github.ref }}-${{ inputs.environment }}
+  cancel-in-progress: false   # queue deployments, don't cancel ongoing ones
+```
+
+`cancel-in-progress: true` is useful for PR preview builds (cancel stale runs). Use `false` for deployments (don't cancel a running deploy).
+
+**Workflow outputs from reusable workflows**
+
+```yaml
+# Called workflow
+on:
+  workflow_call:
+    outputs:
+      image-digest:
+        value: ${{ jobs.build.outputs.digest }}
+
+jobs:
+  build:
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - id: push
+        run: echo "digest=sha256:abc" >> $GITHUB_OUTPUT
+```
+
+```yaml
+# Caller accesses output
+- run: echo "Digest: ${{ needs.build.outputs.image-digest }}"
+```
+
+**Pinning actions to a SHA**
+
+```yaml
+# Instead of a tag (can be moved):
+- uses: actions/checkout@v4
+
+# Pin to a commit SHA (immutable, more secure):
+- uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+```
+
+This defends against a supply-chain attack where a tag is silently moved to malicious code.
+
+**Debugging failed workflows**
+
+```yaml
+steps:
+  - run: echo "Context dump"
+    env:
+      CONTEXT: ${{ toJSON(github) }}   # dump full github context
+
+  - run: env | sort   # list all environment variables
+```
+
+Enable debug logging by setting repository secrets:
+- `ACTIONS_RUNNER_DEBUG = true`
+- `ACTIONS_STEP_DEBUG = true`
+
+**Calling workflows across organizations**
+
+Reusable workflows can be called across orgs if:
+- The source repository is public, **or**
+- The organization allows it in Settings → Actions → Access permissions
+
+```yaml
+uses: other-org/shared-workflows/.github/workflows/ci.yml@v2
+```
+</Level>

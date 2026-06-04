@@ -1,0 +1,9 @@
+{
+  "label": "TypeScript",
+  "position": 14,
+  "link": {
+    "type": "generated-index",
+    "slug": "/typescript",
+    "description": "TypeScript — static types, generics, utility types, and strict patterns for large-scale JavaScript."
+  }
+}

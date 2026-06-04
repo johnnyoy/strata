@@ -1,0 +1,181 @@
+---
+title: Helm Basics
+sidebar_label: Basics
+sidebar_position: 1
+tutorials:
+  - label: "Helm documentation"
+    url: https://helm.sh/docs/
+  - label: "Artifact Hub — chart search"
+    url: https://artifacthub.io/
+  - label: "Helm chart best practices"
+    url: https://helm.sh/docs/chart_best_practices/
+---
+
+# Helm Basics
+
+<Level show="short">
+Helm is the Kubernetes package manager. A **chart** bundles Kubernetes manifests with configurable values.
+
+```bash
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install my-redis bitnami/redis --set auth.password=secret
+
+helm upgrade my-redis bitnami/redis --set replicaCount=3
+helm rollback my-redis 1   # roll back to revision 1
+helm uninstall my-redis
+```
+</Level>
+
+<Level show="medium">
+**Repository management**
+
+```bash
+helm repo add stable   https://charts.helm.sh/stable
+helm repo add bitnami  https://charts.bitnami.com/bitnami
+helm repo update               # fetch latest index from all repos
+helm search repo nginx         # search across all added repos
+helm search hub nginx          # search Artifact Hub (public)
+```
+
+**Installing and inspecting charts**
+
+```bash
+helm show chart bitnami/nginx           # chart metadata
+helm show values bitnami/nginx          # default values.yaml
+helm show values bitnami/nginx > my-values.yaml   # save to edit
+
+helm install my-nginx bitnami/nginx \
+  --version 18.2.0 \
+  --namespace web --create-namespace \
+  -f my-values.yaml \
+  --set replicaCount=2
+```
+
+**Values override precedence** (lowest → highest)
+
+1. Chart's bundled `values.yaml`
+2. `-f values.yaml` files (left to right)
+3. `--set key=value` flags
+
+**Release lifecycle**
+
+```bash
+helm list                              # list releases in current namespace
+helm list -A                           # all namespaces
+helm status my-nginx                   # current state + notes
+helm history my-nginx                  # all revisions with timestamps
+helm upgrade my-nginx bitnami/nginx --reuse-values   # keep existing values
+helm rollback my-nginx 2               # roll back to revision 2
+helm uninstall my-nginx                # delete release + resources
+helm uninstall my-nginx --keep-history # keep history for rollback
+```
+
+**Dry run and debugging**
+
+```bash
+helm install my-nginx bitnami/nginx --dry-run       # simulate install
+helm template my-nginx bitnami/nginx                # render templates without installing
+helm upgrade my-nginx bitnami/nginx --dry-run --debug   # verbose output
+```
+
+**OCI registries** (Helm 3.8+)
+
+```bash
+helm install my-app oci://ghcr.io/my-org/charts/my-app --version 1.0.0
+helm pull oci://ghcr.io/my-org/charts/my-app --version 1.0.0
+```
+</Level>
+
+<Level show="long">
+**What Helm actually does**
+
+When you run `helm install`, Helm:
+1. Fetches the chart (tarball) from the repo index
+2. Merges your values with `values.yaml` defaults
+3. Renders Go templates in `templates/` into plain Kubernetes YAML
+4. Submits the manifests to the cluster API server
+5. Stores a **release record** as a Kubernetes Secret in the target namespace — this is how `helm list` and `helm history` work
+
+**Chart lifecycle hooks**
+
+Hooks let you run jobs at specific points in the release lifecycle:
+
+```yaml
+# templates/db-migrate-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  annotations:
+    "helm.sh/hook": pre-upgrade        # runs before upgrade
+    "helm.sh/hook-weight": "-5"        # ordering (lower = earlier)
+    "helm.sh/hook-delete-policy": hook-succeeded
+```
+
+Available hooks: `pre-install`, `post-install`, `pre-upgrade`, `post-upgrade`, `pre-rollback`, `post-rollback`, `pre-delete`, `post-delete`, `test`
+
+**Library charts**
+
+A library chart (`type: library` in Chart.yaml) provides named templates that other charts can include — it deploys no resources itself.
+
+```yaml
+# Chart.yaml
+type: library
+
+# templates/_helpers.tpl
+{{- define "mylib.labels" -}}
+app.kubernetes.io/name: {{ .Chart.Name }}
+app.kubernetes.io/version: {{ .Chart.AppVersion }}
+{{- end }}
+```
+
+Consuming chart:
+```yaml
+# Chart.yaml
+dependencies:
+  - name: mylib
+    version: "1.0.0"
+    repository: "oci://ghcr.io/my-org/charts"
+```
+
+**`helm diff` plugin — preview changes**
+
+```bash
+helm plugin install https://github.com/databus23/helm-diff
+helm diff upgrade my-nginx bitnami/nginx --reuse-values --version 19.0.0
+```
+
+Shows a kubectl-diff-style view of what will change before you upgrade.
+
+**Packaging and publishing**
+
+```bash
+helm package ./my-chart            # creates my-chart-1.0.0.tgz
+helm push my-chart-1.0.0.tgz oci://ghcr.io/my-org/charts
+helm repo index ./charts-dir --url https://my-org.github.io/charts
+```
+
+**Helmfile — managing multiple releases**
+
+For repos with many charts, Helmfile applies a declarative file across all releases:
+
+```yaml
+# helmfile.yaml
+releases:
+  - name: nginx
+    chart: bitnami/nginx
+    version: 18.2.0
+    values: [./values/nginx.yaml]
+
+  - name: redis
+    chart: bitnami/redis
+    version: 19.0.0
+    namespace: data
+```
+
+```bash
+helmfile sync      # apply all releases
+helmfile diff      # preview changes
+helmfile destroy   # uninstall all
+```
+</Level>

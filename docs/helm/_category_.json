@@ -1,0 +1,9 @@
+{
+  "label": "Helm",
+  "position": 13,
+  "link": {
+    "type": "generated-index",
+    "slug": "/helm",
+    "description": "Kubernetes package management with Helm — charts, templating, releases, and lifecycle management."
+  }
+}

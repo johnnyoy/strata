@@ -1,0 +1,97 @@
+---
+title: Helm Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# Helm Cheat Sheet
+
+<CheatSection title="Repo Management">
+
+| Command | What it does |
+|---------|-------------|
+| `helm repo add <name> <url>` | Add a chart repository |
+| `helm repo update` | Refresh all repo indexes |
+| `helm repo list` | List configured repos |
+| `helm repo remove <name>` | Remove a repo |
+| `helm search repo <keyword>` | Search across added repos |
+| `helm search hub <keyword>` | Search Artifact Hub (public) |
+
+</CheatSection>
+
+<CheatSection title="Release Lifecycle">
+
+| Command | What it does |
+|---------|-------------|
+| `helm install <name> <chart>` | Install a chart as a new release |
+| `helm install <name> <chart> -n <ns> --create-namespace` | Install in a namespace |
+| `helm upgrade <name> <chart>` | Upgrade an existing release |
+| `helm upgrade --install <name> <chart>` | Install or upgrade (idempotent) |
+| `helm rollback <name> <revision>` | Roll back to a prior revision |
+| `helm uninstall <name>` | Delete release and all resources |
+| `helm uninstall <name> --keep-history` | Delete but retain history |
+| `helm list` | List releases in current namespace |
+| `helm list -A` | List releases in all namespaces |
+| `helm status <name>` | Show release status and notes |
+| `helm history <name>` | Show all revisions with timestamps |
+
+</CheatSection>
+
+<CheatSection title="Values Overrides">
+
+| Method | Syntax |
+|--------|--------|
+| Override one value | `--set key=value` |
+| Override nested value | `--set parent.child=value` |
+| Override array element | `--set "items[0]=val"` |
+| Load values file | `-f my-values.yaml` |
+| Multiple files | `-f base.yaml -f overlay.yaml` (right wins) |
+| Reuse existing values | `helm upgrade ... --reuse-values` |
+| Reset to chart defaults | `helm upgrade ... --reset-values` |
+| Inspect defaults | `helm show values <chart>` |
+
+</CheatSection>
+
+<CheatSection title="Template Directives">
+
+| Directive | Purpose |
+|-----------|---------|
+| `{{ .Values.key }}` | Inject a value |
+| `{{ .Release.Name }}` | Release name |
+| `{{ .Chart.AppVersion }}` | App version from Chart.yaml |
+| `{{- if .Values.enabled }}...{{- end }}` | Conditional |
+| `{{- range .Values.list }}...{{- end }}` | Loop over list |
+| `{{ .Values.x \| default 1 }}` | Default if nil |
+| `{{ .Values.x \| quote }}` | Wrap in double quotes |
+| `{{ toYaml .Values.x \| nindent 4 }}` | Render nested YAML |
+| `{{- include "chart.labels" . \| nindent 4 }}` | Include named template |
+| `{{- define "chart.labels" -}}...{{- end }}` | Define named template |
+
+</CheatSection>
+
+<CheatSection title="Debugging">
+
+| Command | What it does |
+|---------|-------------|
+| `helm template <name> <chart>` | Render templates without installing |
+| `helm install <name> <chart> --dry-run` | Simulate install, show output |
+| `helm install <name> <chart> --dry-run --debug` | Include verbose template rendering |
+| `helm lint <chart-dir>` | Validate chart structure |
+| `helm diff upgrade <name> <chart>` | Preview diff (requires helm-diff plugin) |
+| `helm get values <name>` | Show values used for current release |
+| `helm get manifest <name>` | Show rendered Kubernetes manifests |
+| `helm test <name>` | Run chart test hooks |
+
+</CheatSection>
+
+<CheatSection title="OCI Registries (Helm 3.8+)">
+
+| Command | What it does |
+|---------|-------------|
+| `helm install <name> oci://<registry>/<chart> --version <ver>` | Install from OCI |
+| `helm pull oci://<registry>/<chart> --version <ver>` | Download chart tarball |
+| `helm push <chart>.tgz oci://<registry>` | Publish a chart |
+| `helm registry login <registry>` | Authenticate to OCI registry |
+| `helm package ./my-chart` | Package chart into `.tgz` |
+
+</CheatSection>

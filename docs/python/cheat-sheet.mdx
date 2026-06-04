@@ -1,0 +1,131 @@
+---
+title: Python Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# Python Cheat Sheet
+
+<CheatSection title="Built-ins">
+
+| Function | What it does |
+|----------|-------------|
+| `len(x)` | Length of sequence/mapping |
+| `range(start, stop, step)` | Integer range (lazy) |
+| `enumerate(iterable)` | Yields `(index, value)` pairs |
+| `zip(a, b)` | Pairs elements from two iterables |
+| `map(fn, iterable)` | Apply function to each element |
+| `filter(fn, iterable)` | Keep elements where fn returns True |
+| `sorted(iterable, key=fn)` | New sorted list |
+| `reversed(iterable)` | Reversed iterator |
+| `any(iterable)` | True if any element is truthy |
+| `all(iterable)` | True if all elements are truthy |
+| `sum(iterable)` | Sum of elements |
+| `min(iterable)` / `max(iterable)` | Min/max value |
+| `isinstance(obj, type)` | Type check |
+| `type(obj)` | Get type of object |
+
+</CheatSection>
+
+<CheatSection title="List / Dict / Set">
+
+| Operation | Syntax |
+|-----------|--------|
+| Append | `lst.append(x)` |
+| Extend | `lst.extend([1,2,3])` |
+| Insert at index | `lst.insert(i, x)` |
+| Remove by value | `lst.remove(x)` |
+| Pop last | `lst.pop()` |
+| Slice | `lst[1:4]`, `lst[::2]`, `lst[::-1]` |
+| Dict get with default | `d.get(key, default)` |
+| Dict update | `d.update({"a": 1})` or `d \|= other` |
+| Dict keys/values/items | `d.keys()`, `d.values()`, `d.items()` |
+| Set add | `s.add(x)` |
+| Set discard | `s.discard(x)` (no error if absent) |
+| Set operations | `a \| b`, `a & b`, `a - b`, `a ^ b` |
+
+</CheatSection>
+
+<CheatSection title="Comprehensions">
+
+| Type | Syntax |
+|------|--------|
+| List | `[x*2 for x in range(10) if x % 2 == 0]` |
+| Dict | `{k: v for k, v in items.items()}` |
+| Set | `{len(word) for word in words}` |
+| Generator | `(x**2 for x in range(1_000_000))` |
+| Nested | `[x for row in matrix for x in row]` |
+
+</CheatSection>
+
+<CheatSection title="String Methods">
+
+| Method | What it does |
+|--------|-------------|
+| `s.split(sep)` | Split on delimiter |
+| `sep.join(iterable)` | Join with separator |
+| `s.strip()` / `lstrip()` / `rstrip()` | Remove whitespace |
+| `s.upper()` / `lower()` | Case conversion |
+| `s.startswith(prefix)` | Prefix check |
+| `s.replace(old, new)` | Replace substring |
+| `s.find(sub)` | Index of first match (-1 if absent) |
+| `f"{name!r}"` | repr() in f-string |
+| `f"{value:.2f}"` | Format float to 2 decimals |
+| `f"{n:,}"` | Comma-separated number |
+
+</CheatSection>
+
+<CheatSection title="File I/O">
+
+| Pattern | Code |
+|---------|------|
+| Read all | `with open("f") as f: text = f.read()` |
+| Read lines | `with open("f") as f: lines = f.readlines()` |
+| Write | `with open("f", "w") as f: f.write(text)` |
+| Append | `with open("f", "a") as f: f.write(line)` |
+| Binary | `with open("f", "rb") as f: data = f.read()` |
+| Path operations | `from pathlib import Path; p = Path("dir/file.txt")` |
+| Glob files | `list(Path(".").rglob("*.py"))` |
+| Read text | `Path("f").read_text()` |
+| Write text | `Path("f").write_text(content)` |
+
+</CheatSection>
+
+<CheatSection title="asyncio">
+
+| Pattern | Code |
+|---------|------|
+| Run coroutine | `asyncio.run(main())` |
+| Await coroutine | `result = await coro()` |
+| Run concurrently | `results = await asyncio.gather(a(), b(), c())` |
+| Create task | `task = asyncio.create_task(coro())` |
+| Timeout (3.11+) | `async with asyncio.timeout(5.0): ...` |
+| Timeout (older) | `await asyncio.wait_for(coro(), timeout=5.0)` |
+| Semaphore | `async with asyncio.Semaphore(10): ...` |
+| Run in thread | `await loop.run_in_executor(None, blocking_fn)` |
+| Async context mgr | `async with resource as r: ...` |
+| Async iteration | `async for item in async_gen(): ...` |
+
+</CheatSection>
+
+<CheatSection title="Common stdlib">
+
+| Module | Use for |
+|--------|---------|
+| `pathlib.Path` | File system paths (cross-platform) |
+| `os.environ` | Environment variables |
+| `sys.argv`, `sys.exit` | CLI args, exit codes |
+| `json.loads` / `json.dumps` | JSON parsing/serialisation |
+| `re.compile`, `re.match` | Regular expressions |
+| `datetime.datetime.now()` | Current date/time |
+| `collections.Counter` | Frequency counting |
+| `collections.defaultdict` | Dict with default factory |
+| `itertools.chain`, `islice` | Iterator combinators |
+| `functools.lru_cache` | Memoize function results |
+| `typing.TypedDict` | Typed dict definitions |
+| `dataclasses.dataclass` | Structured data classes |
+| `logging.getLogger` | Structured logging |
+| `subprocess.run` | Run shell commands |
+| `unittest.mock.patch` | Mocking in tests |
+
+</CheatSection>

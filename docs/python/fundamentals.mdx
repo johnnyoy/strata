@@ -1,0 +1,263 @@
+---
+title: Python Fundamentals
+sidebar_label: Fundamentals
+sidebar_position: 1
+tutorials:
+  - label: "Python documentation"
+    url: https://docs.python.org/3/
+  - label: "Real Python tutorials"
+    url: https://realpython.com/
+  - label: "Python tutorial"
+    url: https://docs.python.org/3/tutorial/index.html
+---
+
+# Python Fundamentals
+
+<Level show="short">
+```python
+# Types
+name: str = "alice"
+count: int = 42
+price: float = 3.14
+active: bool = True
+
+# Function
+def greet(name: str, greeting: str = "Hello") -> str:
+    return f"{greeting}, {name}!"
+
+# List comprehension
+squares = [x**2 for x in range(10) if x % 2 == 0]
+
+# Dict comprehension
+lengths = {word: len(word) for word in ["cat", "dog", "elephant"]}
+```
+</Level>
+
+<Level show="medium">
+**Variables, types, and type hints**
+
+```python
+# Python is dynamically typed; hints are optional but recommended
+x: int = 10
+items: list[str] = ["a", "b"]
+mapping: dict[str, int] = {"a": 1}
+
+# None is a real type
+def find(items: list, target) -> int | None:
+    for i, v in enumerate(items):
+        if v == target:
+            return i
+    return None
+```
+
+**Functions**
+
+```python
+def connect(host: str, port: int = 5432, *, timeout: float = 30.0) -> None:
+    """Connect to host:port with optional timeout.
+    * forces keyword-only arguments after it."""
+    ...
+
+# Variadic
+def log(*args, level: str = "info", **kwargs) -> None:
+    print(f"[{level}]", *args, kwargs)
+
+# Lambda (short anonymous function)
+double = lambda x: x * 2
+```
+
+**Comprehensions**
+
+```python
+# List
+evens = [x for x in range(20) if x % 2 == 0]
+
+# Nested list
+matrix = [[row * col for col in range(4)] for row in range(4)]
+
+# Dict
+word_count = {word: text.count(word) for word in set(text.split())}
+
+# Set
+unique_lengths = {len(word) for word in words}
+
+# Generator (lazy — doesn't build a list in memory)
+total = sum(x**2 for x in range(1_000_000))
+```
+
+**Unpacking**
+
+```python
+first, *rest = [1, 2, 3, 4, 5]      # first=1, rest=[2,3,4,5]
+a, b, *_ = (10, 20, 30, 40)         # a=10, b=20, ignore rest
+
+# In function calls
+args = [1, 2, 3]
+print(*args)           # same as print(1, 2, 3)
+
+opts = {"end": "\n", "sep": ", "}
+print("a", "b", **opts)
+```
+
+**Error handling**
+
+```python
+try:
+    result = int(user_input)
+except ValueError as e:
+    print(f"Not a number: {e}")
+except (TypeError, OverflowError):
+    print("Conversion failed")
+else:
+    print("Success:", result)   # runs only if no exception
+finally:
+    cleanup()                   # always runs
+
+# Raising
+def divide(a: float, b: float) -> float:
+    if b == 0:
+        raise ValueError("Division by zero")
+    return a / b
+```
+
+**Context managers**
+
+```python
+# File I/O — always use with to guarantee close()
+with open("data.txt", "r") as f:
+    content = f.read()
+
+# Multiple at once
+with open("in.txt") as src, open("out.txt", "w") as dst:
+    dst.write(src.read().upper())
+```
+
+**Virtual environments**
+
+```bash
+python -m venv .venv          # create
+source .venv/bin/activate     # activate (Linux/macOS)
+.venv\Scripts\activate        # activate (Windows)
+pip install requests          # installs into .venv
+pip freeze > requirements.txt
+pip install -r requirements.txt
+```
+</Level>
+
+<Level show="long">
+**The data model — dunder protocols**
+
+Python objects communicate capabilities through special methods:
+
+```python
+class Vector:
+    def __init__(self, x: float, y: float) -> None:
+        self.x, self.y = x, y
+
+    def __repr__(self) -> str:          # repr(v) and REPL display
+        return f"Vector({self.x}, {self.y})"
+
+    def __add__(self, other: "Vector") -> "Vector":
+        return Vector(self.x + other.x, self.y + other.y)
+
+    def __len__(self) -> int:           # len(v)
+        return 2
+
+    def __getitem__(self, i: int) -> float:   # v[0], v[1], iteration
+        return (self.x, self.y)[i]
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Vector):
+            return NotImplemented
+        return self.x == other.x and self.y == other.y
+```
+
+**Descriptor protocol** (how `@property` works)
+
+```python
+class Celsius:
+    def __set_name__(self, owner, name):
+        self.attr = f"_{name}"
+
+    def __get__(self, obj, objtype=None):
+        return getattr(obj, self.attr, None)
+
+    def __set__(self, obj, value):
+        if value < -273.15:
+            raise ValueError("Below absolute zero")
+        setattr(obj, self.attr, float(value))
+
+class Thermometer:
+    temperature = Celsius()   # descriptor instance as class attribute
+```
+
+**Generator internals**
+
+```python
+def fibonacci():
+    a, b = 0, 1
+    while True:
+        yield a          # suspends here, returns a
+        a, b = b, a + b  # resumes here on next()
+
+gen = fibonacci()
+first_10 = [next(gen) for _ in range(10)]
+
+# Send values into a generator (coroutine precursor)
+def accumulator():
+    total = 0
+    while True:
+        value = yield total
+        if value is None:
+            break
+        total += value
+```
+
+**CPython GIL implications**
+
+The Global Interpreter Lock (GIL) prevents true parallel execution of Python bytecode across threads:
+
+- **CPU-bound work**: Use `multiprocessing` or `concurrent.futures.ProcessPoolExecutor` — each process has its own GIL.
+- **I/O-bound work**: `threading` or `asyncio` are both fine — threads release the GIL during I/O.
+- **Python 3.13+**: Per-interpreter GIL (free-threaded experimental mode with `-X gil=0`).
+
+```python
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+
+# CPU-bound: processes
+with ProcessPoolExecutor() as pool:
+    results = list(pool.map(heavy_computation, data))
+
+# I/O-bound: threads
+with ThreadPoolExecutor(max_workers=20) as pool:
+    futures = [pool.submit(fetch_url, url) for url in urls]
+    results = [f.result() for f in futures]
+```
+
+**`__slots__` — memory optimization**
+
+```python
+class Point:
+    __slots__ = ("x", "y")   # prevents __dict__, saves ~200 bytes per instance
+
+    def __init__(self, x: float, y: float) -> None:
+        self.x, self.y = x, y
+```
+
+**Abstract base classes**
+
+```python
+from abc import ABC, abstractmethod
+
+class Storage(ABC):
+    @abstractmethod
+    def save(self, key: str, value: bytes) -> None: ...
+
+    @abstractmethod
+    def load(self, key: str) -> bytes: ...
+
+class S3Storage(Storage):
+    def save(self, key, value): ...
+    def load(self, key): ...
+```
+</Level>

@@ -1,0 +1,252 @@
+---
+title: Terraform Modules
+sidebar_label: Modules
+sidebar_position: 3
+tutorials:
+  - label: "Terraform modules documentation"
+    url: https://developer.hashicorp.com/terraform/language/modules
+  - label: "Terraform Registry — modules"
+    url: https://registry.terraform.io/browse/modules
+  - label: "Module best practices"
+    url: https://developer.hashicorp.com/terraform/language/modules/develop
+---
+
+# Terraform Modules
+
+<Level show="short">
+A module is a folder of `.tf` files called together. Every Terraform config is itself the "root" module.
+
+```hcl
+# Call a local module
+module "vpc" {
+  source = "./modules/vpc"
+  cidr   = "10.0.0.0/16"
+  env    = var.env
+}
+
+# Use its outputs
+resource "aws_instance" "web" {
+  subnet_id = module.vpc.public_subnet_id
+}
+```
+
+```bash
+terraform init   # downloads/links module sources
+```
+</Level>
+
+<Level show="medium">
+**Standard module file layout**
+
+```
+modules/
+└── vpc/
+    ├── main.tf        # resources
+    ├── variables.tf   # input variable declarations
+    ├── outputs.tf     # output value declarations
+    └── versions.tf    # required_providers pin (optional)
+```
+
+**`variables.tf`**
+
+```hcl
+variable "cidr" {
+  type        = string
+  description = "VPC CIDR block"
+}
+
+variable "env" {
+  type    = string
+  default = "dev"
+}
+
+variable "az_count" {
+  type    = number
+  default = 2
+  validation {
+    condition     = var.az_count >= 1 && var.az_count <= 4
+    error_message = "az_count must be 1–4."
+  }
+}
+```
+
+**`outputs.tf`**
+
+```hcl
+output "vpc_id" {
+  value       = aws_vpc.main.id
+  description = "VPC resource ID"
+}
+
+output "public_subnet_ids" {
+  value = aws_subnet.public[*].id
+}
+```
+
+**Calling modules**
+
+```hcl
+# Local module
+module "vpc" {
+  source   = "./modules/vpc"
+  cidr     = "10.0.0.0/16"
+  env      = var.env
+  az_count = 3
+}
+
+# Terraform Registry module (pinned version!)
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~> 20.0"
+
+  cluster_name    = "my-cluster"
+  cluster_version = "1.29"
+  vpc_id          = module.vpc.vpc_id
+  subnet_ids      = module.vpc.private_subnet_ids
+}
+
+# Git source
+module "shared" {
+  source = "git::https://github.com/my-org/tf-modules.git//vpc?ref=v2.1.0"
+}
+```
+
+**Accessing module outputs**
+
+```hcl
+output "cluster_endpoint" {
+  value = module.eks.cluster_endpoint
+}
+
+resource "aws_security_group_rule" "allow_nodes" {
+  source_security_group_id = module.eks.node_security_group_id
+}
+```
+
+**`for_each` on modules** — create multiple instances
+
+```hcl
+variable "regions" {
+  default = { us = "us-east-1", eu = "eu-west-1" }
+}
+
+module "vpc" {
+  for_each = var.regions
+  source   = "./modules/vpc"
+  region   = each.value
+  env      = each.key
+}
+
+# Access: module.vpc["us"].vpc_id
+```
+</Level>
+
+<Level show="long">
+**Module versioning — why it matters**
+
+```hcl
+# Without version pinning — silently gets latest, breaks on major releases
+module "eks" {
+  source = "terraform-aws-modules/eks/aws"   # dangerous in production!
+}
+
+# Pinned — predictable, auditable
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~> 20.0"   # allows 20.x, blocks 21.0
+}
+```
+
+Always commit `.terraform.lock.hcl` — it records exact module versions and checksums for all team members.
+
+**Module composition patterns**
+
+```hcl
+# Root module orchestrates child modules
+# environments/production/main.tf
+
+module "network" {
+  source = "../../modules/network"
+  env    = "production"
+  cidr   = "10.0.0.0/8"
+}
+
+module "database" {
+  source            = "../../modules/rds"
+  subnet_ids        = module.network.private_subnet_ids
+  security_group_id = module.network.db_sg_id
+  instance_class    = "db.t3.large"
+}
+
+module "app" {
+  source            = "../../modules/ecs"
+  vpc_id            = module.network.vpc_id
+  subnet_ids        = module.network.private_subnet_ids
+  db_endpoint       = module.database.endpoint
+  db_secret_arn     = module.database.secret_arn
+}
+```
+
+**Module providers**
+
+By default, child modules inherit the root's provider configuration. For cross-region or cross-account scenarios:
+
+```hcl
+provider "aws" {
+  alias  = "us"
+  region = "us-east-1"
+}
+
+provider "aws" {
+  alias  = "eu"
+  region = "eu-west-1"
+}
+
+module "cdn_us" {
+  source    = "./modules/cdn"
+  providers = { aws = aws.us }
+}
+
+module "cdn_eu" {
+  source    = "./modules/cdn"
+  providers = { aws = aws.eu }
+}
+```
+
+**Testing modules with Terratest**
+
+```go
+// test/vpc_test.go
+package test
+
+import (
+    "testing"
+    "github.com/gruntwork-io/terratest/modules/terraform"
+    "github.com/stretchr/testify/assert"
+)
+
+func TestVpcModule(t *testing.T) {
+    opts := &terraform.Options{
+        TerraformDir: "../modules/vpc",
+        Vars: map[string]interface{}{
+            "env": "test",
+        },
+    }
+    defer terraform.Destroy(t, opts)
+    terraform.InitAndApply(t, opts)
+    vpcID := terraform.Output(t, opts, "vpc_id")
+    assert.NotEmpty(t, vpcID)
+}
+```
+
+**Refactoring state across modules**
+
+When moving a resource into a module, its state address changes. Use `moved` blocks to avoid destroy/recreate:
+
+```hcl
+moved {
+  from = aws_vpc.main
+  to   = module.network.aws_vpc.main
+}
+```
+</Level>

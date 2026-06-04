@@ -92,6 +92,11 @@ const config: Config = {
             {label: 'AKS', to: '/docs/aks'},
             {label: 'Flux', to: '/docs/flux'},
             {label: 'CLI Commands', to: '/docs/cli'},
+            {label: 'Terraform', to: '/docs/terraform'},
+            {label: 'Python', to: '/docs/python'},
+            {label: 'GitHub Actions', to: '/docs/github-actions'},
+            {label: 'Helm', to: '/docs/helm'},
+            {label: 'TypeScript', to: '/docs/typescript'},
           ],
         },
         {

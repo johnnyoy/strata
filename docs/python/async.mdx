@@ -1,0 +1,232 @@
+---
+title: Python Async
+sidebar_label: Async
+sidebar_position: 3
+tutorials:
+  - label: "asyncio documentation"
+    url: https://docs.python.org/3/library/asyncio.html
+  - label: "Real Python: asyncio"
+    url: https://realpython.com/async-io-python/
+  - label: "asyncio cheatsheet"
+    url: https://superfastpython.com/asyncio-cheatsheet/
+---
+
+# Python Async
+
+<Level show="short">
+```python
+import asyncio
+import aiohttp
+
+async def fetch(url: str) -> str:
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.text()
+
+async def main():
+    results = await asyncio.gather(
+        fetch("https://httpbin.org/get"),
+        fetch("https://httpbin.org/ip"),
+    )
+    print(results)
+
+asyncio.run(main())
+```
+</Level>
+
+<Level show="medium">
+**async / await basics**
+
+```python
+import asyncio
+
+async def slow_task(name: str, delay: float) -> str:
+    print(f"Starting {name}")
+    await asyncio.sleep(delay)    # yields control to event loop
+    print(f"Done {name}")
+    return f"{name} result"
+
+async def main():
+    result = await slow_task("fetch", 1.0)
+    print(result)
+
+asyncio.run(main())   # create event loop + run coroutine
+```
+
+**Concurrency with `gather` and `create_task`**
+
+```python
+async def main():
+    # gather — run concurrently, collect results in order
+    results = await asyncio.gather(
+        slow_task("a", 1.0),
+        slow_task("b", 0.5),
+        slow_task("c", 2.0),
+    )
+    # Takes ~2s total (max), not 3.5s (sequential)
+
+    # create_task — fire and forget, get a handle
+    task = asyncio.create_task(slow_task("bg", 1.0))
+    await asyncio.sleep(0)    # yield to let task start
+    result = await task       # wait for completion later
+```
+
+**Error handling**
+
+```python
+# gather propagates first exception and cancels others by default
+try:
+    results = await asyncio.gather(
+        fetch(url1),
+        fetch(url2),
+    )
+except aiohttp.ClientError as e:
+    print(f"Request failed: {e}")
+
+# return_exceptions=True — collect errors instead of raising
+results = await asyncio.gather(
+    fetch(url1), fetch(url2), return_exceptions=True
+)
+for r in results:
+    if isinstance(r, Exception):
+        print(f"Error: {r}")
+    else:
+        process(r)
+```
+
+**Timeouts**
+
+```python
+async def fetch_with_timeout(url: str) -> str:
+    try:
+        async with asyncio.timeout(5.0):   # Python 3.11+
+            return await fetch(url)
+    except TimeoutError:
+        return ""
+
+# Python < 3.11: asyncio.wait_for
+result = await asyncio.wait_for(fetch(url), timeout=5.0)
+```
+
+**`async for` and `async with`**
+
+```python
+# async context manager
+async with aiohttp.ClientSession() as session:
+    resp = await session.get(url)
+
+# async generator
+async def paginate(url: str):
+    next_url = url
+    while next_url:
+        async with session.get(next_url) as resp:
+            data = await resp.json()
+            for item in data["items"]:
+                yield item
+            next_url = data.get("next")
+
+async for item in paginate("https://api.example.com/items"):
+    process(item)
+```
+</Level>
+
+<Level show="long">
+**The asyncio event loop**
+
+Python's event loop is a single-threaded scheduler. At each iteration it:
+1. Checks for I/O readiness (via `select`/`epoll`/`kqueue`)
+2. Advances any coroutines that are ready to resume
+3. Runs scheduled callbacks (`call_later`, `call_soon`)
+
+`await` on an I/O operation suspends the coroutine and registers a callback — the loop runs other tasks until the I/O completes.
+
+**asyncio vs threading vs multiprocessing**
+
+| | `asyncio` | `threading` | `multiprocessing` |
+|--|-----------|-------------|-------------------|
+| Best for | I/O-bound | I/O-bound | CPU-bound |
+| Parallelism | Cooperative | OS-scheduled | True parallel |
+| GIL impact | N/A | Limits CPU perf | None (separate process) |
+| Overhead | Low | Medium | High |
+| Cancellation | First-class | No built-in | Terminate/join |
+
+```python
+# Run CPU-bound work in a thread pool without blocking the loop
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+
+async def compute_heavy(data):
+    loop = asyncio.get_event_loop()
+    with ProcessPoolExecutor() as pool:
+        return await loop.run_in_executor(pool, cpu_intensive_function, data)
+```
+
+**TaskGroup** (Python 3.11+)
+
+```python
+async def main():
+    async with asyncio.TaskGroup() as tg:
+        task_a = tg.create_task(fetch("url_a"))
+        task_b = tg.create_task(fetch("url_b"))
+    # All tasks done here. If any raised, all others are cancelled.
+    print(task_a.result(), task_b.result())
+```
+
+**Cancellation**
+
+```python
+task = asyncio.create_task(long_running())
+await asyncio.sleep(2)
+task.cancel()
+
+try:
+    await task
+except asyncio.CancelledError:
+    print("Task was cancelled")
+    raise   # re-raise — propagates cancellation to caller
+```
+
+Always re-raise `CancelledError` unless you have a specific reason to suppress it (e.g., cleanup in a finally block).
+
+**Semaphore — limit concurrency**
+
+```python
+# Don't hit 1000 APIs at once
+sem = asyncio.Semaphore(10)
+
+async def fetch_limited(url: str) -> str:
+    async with sem:
+        return await fetch(url)
+
+results = await asyncio.gather(*[fetch_limited(u) for u in urls])
+```
+
+**Queue — producer/consumer**
+
+```python
+async def producer(queue: asyncio.Queue):
+    for i in range(10):
+        await queue.put(i)
+    await queue.put(None)   # sentinel
+
+async def consumer(queue: asyncio.Queue):
+    while True:
+        item = await queue.get()
+        if item is None:
+            break
+        process(item)
+        queue.task_done()
+
+async def main():
+    q = asyncio.Queue(maxsize=5)
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(producer(q))
+        tg.create_task(consumer(q))
+```
+
+**Pitfalls**
+
+- `asyncio.sleep(0)` is a yield point — use it to let other tasks run when you have a long synchronous loop inside a coroutine.
+- Calling a blocking function (e.g., `requests.get`, file I/O with `open`) directly in a coroutine freezes the entire event loop. Use `loop.run_in_executor` to offload to a thread pool.
+- `asyncio.run()` creates a new event loop each call. Don't call it inside an existing loop (use `await` instead).
+</Level>
