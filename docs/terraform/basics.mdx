@@ -1,0 +1,204 @@
+---
+title: Terraform Basics
+sidebar_label: Basics
+sidebar_position: 1
+tutorials:
+  - label: "Terraform documentation"
+    url: https://developer.hashicorp.com/terraform/docs
+  - label: "Terraform Registry"
+    url: https://registry.terraform.io/
+  - label: "Get started with Terraform"
+    url: https://developer.hashicorp.com/terraform/tutorials/aws-get-started
+---
+
+# Terraform Basics
+
+<Level show="short">
+Terraform creates and manages cloud infrastructure from declarative HCL config files.
+
+```hcl
+terraform {
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 5.0" }
+  }
+}
+
+provider "aws" { region = "us-east-1" }
+
+resource "aws_s3_bucket" "logs" {
+  bucket = "my-app-logs"
+}
+```
+
+Core workflow: `terraform init` → `terraform plan` → `terraform apply` → `terraform destroy`
+</Level>
+
+<Level show="medium">
+**HCL building blocks**
+
+```hcl
+# Variable — parameterise your config
+variable "env" {
+  type    = string
+  default = "dev"
+}
+
+# Data source — read existing infra without managing it
+data "aws_vpc" "default" {
+  default = true
+}
+
+# Resource — create/manage infra
+resource "aws_subnet" "app" {
+  vpc_id            = data.aws_vpc.default.id
+  cidr_block        = "172.31.48.0/24"
+  availability_zone = "us-east-1a"
+
+  tags = {
+    Name = "${var.env}-app-subnet"
+  }
+}
+
+# Output — expose values after apply
+output "subnet_id" {
+  value = aws_subnet.app.id
+}
+```
+
+**The CLI workflow**
+
+```bash
+terraform init          # download providers + set up backend
+terraform validate      # syntax check without hitting the API
+terraform plan          # show what will change (no side-effects)
+terraform apply         # apply changes (prompts for confirmation)
+terraform apply -auto-approve   # skip the prompt (CI use)
+terraform destroy       # tear down all managed resources
+```
+
+**Referencing other resources**
+
+```hcl
+resource "aws_security_group" "web" {
+  vpc_id = data.aws_vpc.default.id   # data source attribute
+  name   = aws_subnet.app.id         # resource attribute (creates implicit dependency)
+}
+```
+
+**Variables file**
+
+```hcl
+# terraform.tfvars  (auto-loaded)
+env    = "production"
+region = "eu-west-1"
+```
+
+```bash
+terraform plan -var="env=staging"         # one-off override
+terraform plan -var-file="staging.tfvars" # named vars file
+```
+</Level>
+
+<Level show="long">
+**Provider version locking**
+
+```hcl
+terraform {
+  required_version = ">= 1.7"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"   # allows 5.x, blocks 6.0
+    }
+  }
+}
+```
+
+`.terraform.lock.hcl` records the exact provider version and checksums — commit this file. Upgrade with `terraform providers lock -upgrade`.
+
+**Resource lifecycle meta-arguments**
+
+```hcl
+resource "aws_instance" "web" {
+  ami           = "ami-0abcdef1234567890"
+  instance_type = "t3.micro"
+
+  lifecycle {
+    create_before_destroy = true   # zero-downtime replacement
+    prevent_destroy       = true   # block accidental destroy
+    ignore_changes        = [tags] # don't drift-detect tag changes
+  }
+}
+```
+
+**count vs for_each**
+
+```hcl
+# count — simple numeric repetition
+resource "aws_subnet" "az" {
+  count      = 3
+  cidr_block = cidrsubnet("10.0.0.0/16", 8, count.index)
+}
+
+# for_each — key-value map (preferred for named resources)
+variable "buckets" {
+  default = { logs = "us-east-1", backups = "eu-west-1" }
+}
+resource "aws_s3_bucket" "named" {
+  for_each = var.buckets
+  bucket   = "myapp-${each.key}"
+  # each.key = "logs", each.value = "us-east-1"
+}
+```
+
+**depends_on — explicit dependency**
+
+```hcl
+resource "aws_iam_role_policy_attachment" "attach" {
+  depends_on = [aws_iam_role.app]   # wait for role before attaching
+  role       = aws_iam_role.app.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+```
+
+**Locals — computed values**
+
+```hcl
+locals {
+  name_prefix = "${var.project}-${var.env}"
+  common_tags = {
+    Project     = var.project
+    Environment = var.env
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  tags       = local.common_tags
+}
+```
+
+**Importing existing resources**
+
+```bash
+# Import manually created resource into state
+terraform import aws_s3_bucket.logs my-existing-bucket-name
+```
+
+From Terraform 1.5+, use `import` blocks in config for reviewable, repeatable imports:
+
+```hcl
+import {
+  to = aws_s3_bucket.logs
+  id = "my-existing-bucket-name"
+}
+```
+
+**Taint / force replacement**
+
+```bash
+# Force replacement of a specific resource on next apply (1.5+)
+terraform plan -replace="aws_instance.web"
+```
+</Level>

@@ -1,0 +1,251 @@
+---
+title: TypeScript Patterns
+sidebar_label: Patterns
+sidebar_position: 3
+tutorials:
+  - label: "TypeScript handbook — Narrowing"
+    url: https://www.typescriptlang.org/docs/handbook/2/narrowing.html
+  - label: "TypeScript handbook — Declaration merging"
+    url: https://www.typescriptlang.org/docs/handbook/declaration-merging.html
+  - label: "Matt Pocock's TypeScript tips"
+    url: https://www.totaltypescript.com/tips
+---
+
+# TypeScript Patterns
+
+<Level show="short">
+```ts
+// Type guard
+function isUser(val: unknown): val is User {
+  return typeof val === "object" && val !== null && "id" in val;
+}
+
+// Discriminated union
+type Result<T> = { ok: true; value: T } | { ok: false; error: string };
+
+function handle<T>(result: Result<T>) {
+  if (result.ok) return result.value;  // T
+  throw new Error(result.error);
+}
+```
+</Level>
+
+<Level show="medium">
+**Type guards**
+
+```ts
+// typeof guard
+function process(val: string | number) {
+  if (typeof val === "string") return val.toUpperCase();
+  return val.toFixed(2);
+}
+
+// instanceof guard
+function formatDate(val: Date | string): string {
+  if (val instanceof Date) return val.toISOString();
+  return val;
+}
+
+// in guard
+type Cat = { meow(): void };
+type Dog = { bark(): void };
+function speak(animal: Cat | Dog) {
+  if ("meow" in animal) animal.meow();
+  else animal.bark();
+}
+
+// Custom type predicate (val is T)
+function isNonNull<T>(val: T | null | undefined): val is T {
+  return val !== null && val !== undefined;
+}
+const items = [1, null, 2, undefined, 3];
+const nums = items.filter(isNonNull);  // number[]
+```
+
+**Discriminated unions**
+
+Use a shared literal field (`kind`, `type`, `status`) as the discriminant. TypeScript narrows exhaustively:
+
+```ts
+type Action =
+  | { type: "increment"; amount: number }
+  | { type: "decrement"; amount: number }
+  | { type: "reset" };
+
+function reducer(state: number, action: Action): number {
+  switch (action.type) {
+    case "increment": return state + action.amount;
+    case "decrement": return state - action.amount;
+    case "reset":     return 0;
+    // TypeScript errors if a case is missing (with noImplicitReturns)
+  }
+}
+```
+
+**Assertion functions**
+
+```ts
+function assert(condition: boolean, msg: string): asserts condition {
+  if (!condition) throw new Error(msg);
+}
+
+function assertIsString(val: unknown): asserts val is string {
+  if (typeof val !== "string") throw new TypeError(`Expected string, got ${typeof val}`);
+}
+
+let x: unknown = JSON.parse(data);
+assertIsString(x);
+x.toUpperCase();  // x: string after assertion
+```
+
+**Strict null-safety patterns**
+
+```ts
+// Nullish coalescing
+const port = config.port ?? 3000;
+
+// Optional chaining
+const city = user?.address?.city;
+
+// Non-null assertion (use sparingly — disables safety)
+const el = document.getElementById("app")!;
+
+// Type narrowing with truthiness
+function greet(name: string | null | undefined) {
+  if (!name) return "Hello, stranger";
+  return `Hello, ${name}`;
+}
+
+// Exhaustive check helper
+function assertNever(x: never): never {
+  throw new Error(`Unhandled case: ${JSON.stringify(x)}`);
+}
+```
+</Level>
+
+<Level show="long">
+**Module augmentation — extending library types**
+
+```ts
+// Augment Express request type (must be in a .d.ts or .ts file)
+import "express";
+declare module "express-serve-static-core" {
+  interface Request {
+    user?: { id: number; roles: string[] };
+    requestId: string;
+  }
+}
+
+// Now req.user is typed everywhere
+app.get("/profile", (req, res) => {
+  const id = req.user?.id;  // number | undefined
+});
+```
+
+**Global augmentation**
+
+```ts
+// global.d.ts
+declare global {
+  interface Window {
+    analytics: AnalyticsClient;
+  }
+  type Nullable<T> = T | null;
+}
+export {};  // makes this a module, required for declare global
+```
+
+**Branding — nominal typing workaround**
+
+TypeScript's structural typing means `type UserId = number` is identical to `number`. Brand it to make types incompatible:
+
+```ts
+type Brand<T, Brand extends string> = T & { readonly __brand: Brand };
+
+type UserId    = Brand<number, "UserId">;
+type ProductId = Brand<number, "ProductId">;
+
+function getUser(id: UserId): User { ... }
+function getProduct(id: ProductId): Product { ... }
+
+const uid = 42 as UserId;
+const pid = 42 as ProductId;
+
+getUser(uid);   // OK
+getUser(pid);   // Error — ProductId is not assignable to UserId
+```
+
+**Builder pattern with fluent typing**
+
+```ts
+class QueryBuilder<T extends Record<string, unknown>> {
+  private filters: Partial<T> = {};
+
+  where<K extends keyof T>(key: K, value: T[K]): this {
+    this.filters[key] = value;
+    return this;
+  }
+
+  build(): Partial<T> {
+    return this.filters;
+  }
+}
+
+const query = new QueryBuilder<{ name: string; age: number }>()
+  .where("name", "alice")
+  .where("age", 30)
+  .build();
+```
+
+**Const assertions — preserve literal types**
+
+```ts
+const routes = ["home", "about", "contact"] as const;
+type Route = (typeof routes)[number];   // "home" | "about" | "contact"
+
+const config = {
+  endpoint: "https://api.example.com",
+  timeout: 5000,
+} as const;
+// config.timeout is 5000 (literal), not number
+```
+
+**Common React + TypeScript patterns**
+
+```tsx
+// Prop types
+interface ButtonProps {
+  variant: "primary" | "secondary";
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  children: React.ReactNode;
+}
+
+// Generic component
+function List<T extends { id: string | number }>({
+  items,
+  renderItem,
+}: {
+  items: T[];
+  renderItem: (item: T) => React.ReactNode;
+}) {
+  return <ul>{items.map((item) => <li key={item.id}>{renderItem(item)}</li>)}</ul>;
+}
+
+// useRef with typed element
+const inputRef = React.useRef<HTMLInputElement>(null);
+inputRef.current?.focus();
+
+// Custom hook with typed return
+function useLocalStorage<T>(key: string, initial: T) {
+  const [value, setValue] = React.useState<T>(() => {
+    const stored = localStorage.getItem(key);
+    return stored !== null ? (JSON.parse(stored) as T) : initial;
+  });
+  const set = (v: T) => {
+    setValue(v);
+    localStorage.setItem(key, JSON.stringify(v));
+  };
+  return [value, set] as const;
+}
+```
+</Level>

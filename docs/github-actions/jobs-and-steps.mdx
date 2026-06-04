@@ -1,0 +1,232 @@
+---
+title: Jobs and Steps
+sidebar_label: Jobs & Steps
+sidebar_position: 2
+tutorials:
+  - label: "Workflow syntax — jobs"
+    url: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobs
+  - label: "Caching dependencies"
+    url: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/caching-dependencies-to-speed-up-workflows
+  - label: "Storing workflow data as artifacts"
+    url: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/storing-and-sharing-data-from-a-workflow
+---
+
+# Jobs and Steps
+
+<Level show="short">
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+
+  deploy:
+    needs: test          # runs after test succeeds
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Deploying..."
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+```
+</Level>
+
+<Level show="medium">
+**Job dependencies (`needs`)**
+
+```yaml
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+
+  deploy:
+    needs: [lint, test]   # both must succeed
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run deploy
+```
+
+**Matrix strategy — fan-out across versions/platforms**
+
+```yaml
+jobs:
+  test:
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+        os: [ubuntu-latest, windows-latest]
+      fail-fast: false   # don't cancel other jobs if one fails
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+```
+
+**Secrets**
+
+```yaml
+steps:
+  - name: Push to registry
+    env:
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+    run: |
+      echo "$REGISTRY_PASSWORD" | docker login -u myuser --password-stdin ghcr.io
+      docker push ghcr.io/my-org/my-app:latest
+```
+
+`GITHUB_TOKEN` is auto-injected — use it without adding a secret:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+**Caching**
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: ~/.npm
+    key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+    restore-keys: |
+      ${{ runner.os }}-npm-
+```
+
+Cache hit: the `path` is restored. Cache miss: the action restores the closest `restore-keys` match, and a new cache entry is saved at job end.
+
+**Artifacts — passing files between jobs**
+
+```yaml
+jobs:
+  build:
+    steps:
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: dist/
+          retention-days: 7
+
+  deploy:
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: dist/
+      - run: deploy dist/
+```
+</Level>
+
+<Level show="long">
+**Passing data between steps (outputs)**
+
+```yaml
+steps:
+  - name: Get git tag
+    id: tag
+    run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+  - name: Build image
+    run: docker build -t my-app:${{ steps.tag.outputs.version }} .
+```
+
+**Passing data between jobs**
+
+Jobs run on separate VMs. Use `outputs` to pass step outputs to downstream jobs:
+
+```yaml
+jobs:
+  prepare:
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - id: tag
+        run: echo "version=1.2.3" >> $GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    steps:
+      - run: echo "Version is ${{ needs.prepare.outputs.version }}"
+```
+
+**Services — sidecar containers**
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: testpass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - run: psql -h localhost -U postgres -c "SELECT 1"
+        env:
+          PGPASSWORD: testpass
+```
+
+**Container jobs — run steps inside a Docker image**
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20-alpine
+      env:
+        NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci && npm test
+```
+
+**`continue-on-error` and `timeout-minutes`**
+
+```yaml
+steps:
+  - run: npm run flaky-test
+    continue-on-error: true    # job succeeds even if this step fails
+
+jobs:
+  build:
+    timeout-minutes: 20        # cancel the job if it exceeds 20 minutes
+```
+
+**Skipping jobs with context filters**
+
+```yaml
+jobs:
+  deploy:
+    if: >
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      !contains(github.event.head_commit.message, '[skip deploy]')
+```
+
+**Re-running failed jobs**
+
+From the Actions UI you can re-run only the failed jobs in a workflow — GitHub re-uses the same SHA, run ID, and artifacts from the passing jobs, saving CI minutes.
+</Level>

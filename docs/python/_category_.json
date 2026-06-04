@@ -1,0 +1,9 @@
+{
+  "label": "Python",
+  "position": 11,
+  "link": {
+    "type": "generated-index",
+    "slug": "/python",
+    "description": "Python essentials — data structures, comprehensions, async I/O, and the standard library."
+  }
+}

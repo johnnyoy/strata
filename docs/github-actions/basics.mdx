@@ -1,0 +1,226 @@
+---
+title: GitHub Actions Basics
+sidebar_label: Basics
+sidebar_position: 1
+tutorials:
+  - label: "GitHub Actions documentation"
+    url: https://docs.github.com/en/actions
+  - label: "Workflow syntax reference"
+    url: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions
+  - label: "Actions Marketplace"
+    url: https://github.com/marketplace?type=actions
+---
+
+# GitHub Actions Basics
+
+<Level show="short">
+A workflow is a YAML file in `.github/workflows/`. Jobs run on virtual machines; steps run sequentially inside a job.
+
+```yaml
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+```
+</Level>
+
+<Level show="medium">
+**Workflow anatomy**
+
+```yaml
+name: Build & Deploy          # displayed in the Actions tab
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:          # manual trigger via GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-latest    # runner image
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4      # action from Marketplace
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci                    # shell command
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_ENV: production         # step-level env var
+```
+
+**Trigger filters**
+
+```yaml
+on:
+  push:
+    branches: [main, "release/**"]
+    paths-ignore: ["docs/**", "*.md"]  # skip docs-only changes
+
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+  schedule:
+    - cron: "0 6 * * 1"   # every Monday at 06:00 UTC
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options: [staging, production]
+```
+
+**Environment variables**
+
+```yaml
+env:
+  APP_NAME: my-app        # workflow-level (available in all jobs)
+
+jobs:
+  deploy:
+    env:
+      REGION: us-east-1   # job-level
+    steps:
+      - run: echo "Deploying $APP_NAME to $REGION"
+        env:
+          DEBUG: "true"   # step-level (highest precedence)
+```
+
+**The `github` context**
+
+```yaml
+steps:
+  - run: |
+      echo "Repo:   ${{ github.repository }}"
+      echo "Ref:    ${{ github.ref_name }}"
+      echo "SHA:    ${{ github.sha }}"
+      echo "Actor:  ${{ github.actor }}"
+      echo "Event:  ${{ github.event_name }}"
+```
+
+**Conditional steps**
+
+```yaml
+steps:
+  - run: npm run deploy
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+  - run: echo "PR build"
+    if: github.event_name == 'pull_request'
+```
+</Level>
+
+<Level show="long">
+**Runner architecture**
+
+GitHub-hosted runners are fresh VMs (or containers) provisioned per job and destroyed afterwards. Each job gets:
+- 2–4 CPU cores, 7–14 GB RAM (standard runners)
+- A working directory at `/home/runner/work/{repo}/{repo}`
+- Pre-installed tools (Node, Python, Java, Docker, AWS CLI, etc.)
+- `GITHUB_WORKSPACE` env var pointing to the checkout root
+
+Jobs on the **same** runner image do not share filesystem state — files written in one job are gone in the next. Use artifacts to pass files between jobs.
+
+**Expressions and functions**
+
+```yaml
+steps:
+  - run: echo "Matrix: ${{ matrix.node }}"
+  - run: echo ${{ toJSON(github.event) }}          # serialize context to JSON
+  - run: echo ${{ fromJSON(steps.load.outputs.data).key }}
+
+  # Conditionals use expression syntax
+  - if: ${{ contains(github.event.head_commit.message, '[skip ci]') == false }}
+    run: npm test
+
+  # startsWith, endsWith, format, join, hashFiles
+  - uses: actions/cache@v4
+    with:
+      key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+```
+
+**Outputs between steps**
+
+```yaml
+steps:
+  - name: Get version
+    id: version
+    run: echo "tag=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+  - name: Use version
+    run: echo "Building version ${{ steps.version.outputs.tag }}"
+```
+
+**GITHUB_TOKEN permissions**
+
+```yaml
+permissions:
+  contents: read      # default for most triggers
+  packages: write     # needed to push to GHCR
+  id-token: write     # needed for OIDC cloud auth (no secrets!)
+
+jobs:
+  push-image:
+    permissions:
+      packages: write   # job-level override
+```
+
+**OIDC — cloud auth without stored secrets**
+
+Instead of storing AWS/Azure credentials as repository secrets, request a short-lived token:
+
+```yaml
+steps:
+  - uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: arn:aws:iam::123456789:role/GitHubActions
+      aws-region: us-east-1
+      # No access-key-id/secret-access-key needed!
+```
+
+The workflow exchanges its OIDC JWT for cloud credentials. The cloud provider verifies that the JWT came from your repo + branch before granting the role.
+
+**Concurrency — cancel stale runs**
+
+```yaml
+concurrency:
+  group: deploy-${{ github.ref }}    # one deploy per branch at a time
+  cancel-in-progress: true           # cancel older run if new one starts
+```
+
+**`github` vs `env` vs `secrets` context precedence**
+
+| Context | Set by | Example |
+|---------|--------|---------|
+| `github.*` | GitHub platform | `github.sha` |
+| `env.*` | `env:` blocks | `env.APP_NAME` |
+| `secrets.*` | Repository/org secrets | `secrets.API_KEY` |
+| `vars.*` | Repository/org variables (non-secret) | `vars.REGION` |
+| `inputs.*` | `workflow_dispatch` inputs | `inputs.environment` |
+</Level>

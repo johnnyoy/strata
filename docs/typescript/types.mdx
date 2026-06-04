@@ -1,0 +1,239 @@
+---
+title: TypeScript Types
+sidebar_label: Types
+sidebar_position: 1
+tutorials:
+  - label: "TypeScript handbook"
+    url: https://www.typescriptlang.org/docs/handbook/intro.html
+  - label: "TypeScript playground"
+    url: https://www.typescriptlang.org/play
+  - label: "Total TypeScript"
+    url: https://www.totaltypescript.com/
+---
+
+# TypeScript Types
+
+<Level show="short">
+```ts
+// Primitives
+let name: string = "alice";
+let count: number = 42;
+let active: boolean = true;
+
+// Union
+type Status = "pending" | "done" | "error";
+
+// Interface
+interface User {
+  id: number;
+  name: string;
+  email?: string;   // optional
+}
+
+// Function
+function greet(user: User): string {
+  return `Hello, ${user.name}`;
+}
+```
+
+Enable strict mode in `tsconfig.json`: `"strict": true`
+</Level>
+
+<Level show="medium">
+**Primitives and special types**
+
+```ts
+let x: number = 42;
+let s: string = "hello";
+let b: boolean = true;
+let n: null = null;
+let u: undefined = undefined;
+let sym: symbol = Symbol("id");
+let big: bigint = 9007199254740993n;
+
+// unknown — safe alternative to any: must narrow before use
+let raw: unknown = JSON.parse(data);
+if (typeof raw === "string") raw.toUpperCase();  // ok after narrowing
+
+// never — unreachable code / exhaustiveness checks
+function assertNever(x: never): never {
+  throw new Error(`Unexpected value: ${x}`);
+}
+```
+
+**Arrays and tuples**
+
+```ts
+let nums: number[] = [1, 2, 3];
+let strs: Array<string> = ["a", "b"];
+
+// Tuple — fixed-length, fixed-type
+type Point = [number, number];
+const p: Point = [10, 20];
+
+// Named tuple
+type Range = [start: number, end: number];
+```
+
+**Union and intersection**
+
+```ts
+type ID = string | number;       // union — either
+type Admin = User & { role: string };  // intersection — both
+
+// Discriminated union — a union with a shared literal field
+type Shape =
+  | { kind: "circle";    radius: number }
+  | { kind: "rectangle"; width: number; height: number };
+
+function area(s: Shape): number {
+  switch (s.kind) {
+    case "circle":    return Math.PI * s.radius ** 2;
+    case "rectangle": return s.width * s.height;
+  }
+}
+```
+
+**Interface vs type alias**
+
+```ts
+// Interface — extends + declaration merging
+interface Animal { name: string }
+interface Dog extends Animal { breed: string }
+interface Dog { age: number }  // merged — Dog now has name + breed + age
+
+// Type alias — more expressive (unions, mapped types)
+type StringOrNumber = string | number;
+type Readonly<T> = { readonly [K in keyof T]: T[K] };
+```
+
+Rule of thumb: `interface` for object shapes that may be extended; `type` for everything else.
+
+**Optional, readonly, non-null assertion**
+
+```ts
+interface Config {
+  readonly host: string;   // can't be reassigned
+  port?: number;           // optional (number | undefined)
+}
+
+function getPort(cfg: Config): number {
+  return cfg.port!;        // ! = "trust me, this isn't undefined"
+  // Better: cfg.port ?? 5432
+}
+```
+
+**`tsconfig.json` — key strict options**
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,               // enables all strictness flags
+    "noUncheckedIndexedAccess": true,  // arr[0] is T | undefined
+    "exactOptionalPropertyTypes": true, // {x?: string} won't accept {x: undefined}
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}
+```
+</Level>
+
+<Level show="long">
+**Structural typing — how TypeScript compares types**
+
+TypeScript uses structural (duck) typing: two types are compatible if one has at least the required properties of the other.
+
+```ts
+interface Point2D { x: number; y: number }
+interface Point3D { x: number; y: number; z: number }
+
+function distance(p: Point2D): number {
+  return Math.sqrt(p.x ** 2 + p.y ** 2);
+}
+
+const p3: Point3D = { x: 1, y: 2, z: 3 };
+distance(p3);  // OK — Point3D is structurally compatible with Point2D
+```
+
+**Excess property checking** only happens on object literal assignment (not on variables):
+
+```ts
+distance({ x: 1, y: 2, z: 3 });  // Error — excess property z
+distance(p3);                      // OK — p3 is a variable, not a literal
+```
+
+**Narrowing algorithm**
+
+TypeScript narrows types based on control flow:
+
+```ts
+function process(val: string | number | null) {
+  if (val === null) {
+    // val: null
+    return;
+  }
+  if (typeof val === "string") {
+    // val: string
+    return val.toUpperCase();
+  }
+  // val: number
+  return val.toFixed(2);
+}
+```
+
+**`in` narrowing for discriminated unions:**
+
+```ts
+type Cat = { meow: () => void };
+type Dog = { bark: () => void };
+
+function sound(animal: Cat | Dog) {
+  if ("meow" in animal) animal.meow();  // animal: Cat
+  else animal.bark();                   // animal: Dog
+}
+```
+
+**Declaration merging**
+
+Interfaces (and namespaces) can be extended across files — useful for augmenting library types:
+
+```ts
+// Augment Express Request type
+declare namespace Express {
+  interface Request {
+    user?: User;
+  }
+}
+```
+
+**Variance (+/- modifiers on mapped types)**
+
+```ts
+// Covariant (out) — can only be read
+type ReadonlyBox<out T> = { readonly value: T };
+
+// Contravariant (in) — can only be written
+type WriteOnlyBox<in T> = { set: (value: T) => void };
+```
+
+**Template literal types**
+
+```ts
+type EventName = "click" | "focus" | "blur";
+type Handler = `on${Capitalize<EventName>}`;
+// Handler = "onClick" | "onFocus" | "onBlur"
+
+type CSSProperty = `${string}-${string}`;  // "font-size", "background-color", etc.
+```
+
+**`satisfies` operator** (TypeScript 4.9+)
+
+```ts
+const config = {
+  host: "localhost",
+  port: 5432,
+} satisfies Record<string, string | number>;
+// config.host is still inferred as string (not string | number)
+// but TypeScript still validates the shape
+```
+</Level>

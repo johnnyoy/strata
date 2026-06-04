@@ -1,0 +1,114 @@
+---
+title: TypeScript Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# TypeScript Cheat Sheet
+
+<CheatSection title="Basic Types">
+
+| Type | Syntax |
+|------|--------|
+| Primitive | `string`, `number`, `boolean`, `bigint`, `symbol` |
+| Absent | `null`, `undefined`, `void` (function returns nothing) |
+| Any value | `unknown` (safe) · `any` (unsafe, avoid) |
+| Unreachable | `never` |
+| Array | `string[]` or `Array<string>` |
+| Tuple | `[string, number]` |
+| Named tuple | `[name: string, age: number]` |
+| Object literal | `{ x: number; y?: number }` |
+| Function | `(a: string, b: number) => boolean` |
+| Index signature | `{ [key: string]: number }` |
+
+</CheatSection>
+
+<CheatSection title="Union & Intersection">
+
+| Concept | Syntax |
+|---------|--------|
+| Union (either) | `string \| number` |
+| Intersection (both) | `User & Admin` |
+| Discriminated union | `{ kind: "a"; x: number } \| { kind: "b"; y: string }` |
+| Literal union | `"get" \| "post" \| "put"` |
+| Nullable | `string \| null` |
+| Optional param | `function f(x?: string)` = `string \| undefined` |
+
+</CheatSection>
+
+<CheatSection title="Interfaces & Types">
+
+| Operation | Interface | Type alias |
+|-----------|-----------|------------|
+| Extend | `interface B extends A` | `type B = A & { ... }` |
+| Declaration merging | Yes | No |
+| Union types | No | Yes |
+| Mapped/conditional types | No | Yes |
+| Best used for | Object shapes | Unions, mapped, complex |
+
+</CheatSection>
+
+<CheatSection title="Generics">
+
+| Pattern | Syntax |
+|---------|--------|
+| Generic function | `function f<T>(x: T): T` |
+| Constrained | `function f<T extends object>(x: T)` |
+| Multiple params | `function f<T, U>(a: T, b: U): [T, U]` |
+| Generic interface | `interface Box<T> { value: T }` |
+| Default type param | `type Api<T = unknown> = { data: T }` |
+| keyof constraint | `function get<T, K extends keyof T>(obj: T, key: K): T[K]` |
+
+</CheatSection>
+
+<CheatSection title="Utility Types">
+
+| Type | What it does |
+|------|-------------|
+| `Partial<T>` | All properties optional |
+| `Required<T>` | All properties required |
+| `Readonly<T>` | All properties readonly |
+| `Pick<T, K>` | Keep only specified keys |
+| `Omit<T, K>` | Remove specified keys |
+| `Record<K, V>` | Object type with keys K and values V |
+| `Exclude<T, U>` | Remove U members from union T |
+| `Extract<T, U>` | Keep only U members from union T |
+| `NonNullable<T>` | Remove null and undefined |
+| `ReturnType<T>` | Return type of function T |
+| `Parameters<T>` | Tuple of parameter types of function T |
+| `Awaited<T>` | Recursively unwrap Promise |
+| `InstanceType<T>` | Instance type of a constructor |
+
+</CheatSection>
+
+<CheatSection title="Type Guards">
+
+| Guard | Syntax |
+|-------|--------|
+| typeof | `if (typeof x === "string")` |
+| instanceof | `if (x instanceof Date)` |
+| in | `if ("name" in obj)` |
+| Truthiness | `if (x)` / `if (!x)` |
+| Equality | `if (x === null)` |
+| Custom predicate | `function isUser(x: unknown): x is User { ... }` |
+| Assertion function | `function assert(c: boolean): asserts c { ... }` |
+| Non-null filter | `items.filter((x): x is T => x !== null)` |
+
+</CheatSection>
+
+<CheatSection title="tsconfig Flags">
+
+| Flag | What it enables |
+|------|----------------|
+| `"strict": true` | Enables all strict checks at once |
+| `"noImplicitAny"` | Error on implicit `any` |
+| `"strictNullChecks"` | `null`/`undefined` not assignable to other types |
+| `"strictFunctionTypes"` | Stricter function parameter checking |
+| `"noImplicitReturns"` | All code paths must return a value |
+| `"noUncheckedIndexedAccess"` | `arr[0]` is `T \| undefined` |
+| `"exactOptionalPropertyTypes"` | `{x?: string}` won't accept `{x: undefined}` |
+| `"noFallthroughCasesInSwitch"` | Each switch case must break or return |
+| `"esModuleInterop"` | Default import from CommonJS modules |
+| `"moduleResolution: bundler"` | Modern resolution for Vite/esbuild/webpack |
+
+</CheatSection>

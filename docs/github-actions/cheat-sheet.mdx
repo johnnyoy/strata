@@ -1,0 +1,104 @@
+---
+title: GitHub Actions Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# GitHub Actions Cheat Sheet
+
+<CheatSection title="Triggers">
+
+| Trigger | YAML |
+|---------|------|
+| Push to branch | `on: push: branches: [main]` |
+| Pull request | `on: pull_request: types: [opened, synchronize]` |
+| Manual | `on: workflow_dispatch` |
+| Schedule (cron) | `on: schedule: - cron: "0 6 * * 1"` |
+| Release published | `on: release: types: [published]` |
+| Tag push | `on: push: tags: ["v*"]` |
+| Ignore paths | `on: push: paths-ignore: ["docs/**"]` |
+| Called by another workflow | `on: workflow_call` |
+
+</CheatSection>
+
+<CheatSection title="Job Config">
+
+| Field | Purpose |
+|-------|---------|
+| `runs-on: ubuntu-latest` | GitHub-hosted runner image |
+| `needs: [build, test]` | Wait for other jobs first |
+| `if: github.ref == 'refs/heads/main'` | Conditional job execution |
+| `timeout-minutes: 20` | Cancel job if over limit |
+| `continue-on-error: true` | Don't fail workflow on this job |
+| `strategy.matrix: {node: [18, 20]}` | Run job N times with different values |
+| `strategy.fail-fast: false` | Don't cancel matrix siblings on failure |
+| `environment: production` | Link to a deployment environment |
+| `concurrency: group: deploy-${{ github.ref }}` | One run per group at a time |
+
+</CheatSection>
+
+<CheatSection title="Contexts & Expressions">
+
+| Expression | Value |
+|------------|-------|
+| `github.sha` | Full commit SHA |
+| `github.ref_name` | Branch or tag name |
+| `github.actor` | Username who triggered the run |
+| `github.event_name` | Trigger event type (`push`, `pull_request`, …) |
+| `github.repository` | `owner/repo` |
+| `runner.os` | `Linux`, `Windows`, `macOS` |
+| `steps.<id>.outputs.<name>` | Output from a previous step |
+| `needs.<job>.outputs.<name>` | Output from an upstream job |
+| `toJSON(github.event)` | Serialize context to JSON string |
+| `hashFiles('**/package-lock.json')` | Hash of matched files (for cache keys) |
+
+</CheatSection>
+
+<CheatSection title="Secrets & Variables">
+
+| Usage | Syntax |
+|-------|--------|
+| Access secret | `${{ secrets.MY_SECRET }}` |
+| Auto token | `${{ secrets.GITHUB_TOKEN }}` |
+| Repository variable | `${{ vars.REGION }}` |
+| Workflow dispatch input | `${{ inputs.environment }}` |
+| Pass to step env | `env: TOKEN: ${{ secrets.TOKEN }}` |
+| Inherit all secrets (reusable) | `secrets: inherit` |
+
+</CheatSection>
+
+<CheatSection title="Caching">
+
+| Pattern | Code |
+|---------|------|
+| npm | `path: ~/.npm` `key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}` |
+| pip | `path: ~/.cache/pip` `key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}` |
+| Gradle | `path: ~/.gradle` `key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}` |
+| Fallback key | `restore-keys: ${{ runner.os }}-npm-` |
+| Setup-node cache | `uses: actions/setup-node@v4` `with: cache: npm` |
+
+</CheatSection>
+
+<CheatSection title="Artifacts">
+
+| Action | Usage |
+|--------|-------|
+| Upload | `uses: actions/upload-artifact@v4` `with: name: build path: dist/` |
+| Download in same run | `uses: actions/download-artifact@v4` `with: name: build path: dist/` |
+| Download from other run | Add `run-id: ${{ github.event.workflow_run.id }}` |
+| Retention | `with: retention-days: 7` |
+
+</CheatSection>
+
+<CheatSection title="Permissions">
+
+| Permission | When needed |
+|------------|-------------|
+| `contents: read` | Default — read repo |
+| `contents: write` | Push commits, create releases |
+| `packages: write` | Push to GitHub Container Registry |
+| `id-token: write` | OIDC cloud auth (AWS/Azure/GCP) |
+| `pull-requests: write` | Comment on PRs |
+| `issues: write` | Create/update issues |
+
+</CheatSection>

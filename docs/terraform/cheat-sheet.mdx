@@ -1,0 +1,91 @@
+---
+title: Terraform Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# Terraform Cheat Sheet
+
+<CheatSection title="CLI">
+
+| Command | What it does |
+|---------|-------------|
+| `terraform init` | Initialize working directory, download providers |
+| `terraform validate` | Check syntax without hitting APIs |
+| `terraform plan` | Preview changes (no side-effects) |
+| `terraform apply` | Apply changes (prompts confirmation) |
+| `terraform apply -auto-approve` | Apply without prompt (CI use) |
+| `terraform destroy` | Destroy all managed resources |
+| `terraform fmt` | Auto-format `.tf` files |
+| `terraform output` | Show output values |
+| `terraform show` | Show current state in human-readable form |
+| `terraform graph` | Generate dependency graph (pipe to `dot`) |
+
+</CheatSection>
+
+<CheatSection title="Providers & Resources">
+
+| HCL block | Purpose |
+|-----------|---------|
+| `terraform { required_providers {} }` | Pin provider source + version |
+| `provider "aws" { region = "us-east-1" }` | Configure a provider |
+| `resource "aws_instance" "web" {}` | Manage a real resource |
+| `data "aws_vpc" "default" {}` | Read existing resource without managing |
+| `locals { name = "app" }` | Computed values for reuse |
+
+</CheatSection>
+
+<CheatSection title="Variables & Outputs">
+
+| Syntax | Purpose |
+|--------|---------|
+| `variable "env" { type = string }` | Declare input variable |
+| `var.env` | Reference a variable |
+| `terraform.tfvars` | Auto-loaded variable values file |
+| `terraform plan -var="env=prod"` | Override variable on CLI |
+| `output "id" { value = aws_vpc.main.id }` | Expose attribute after apply |
+| `output "secret" { sensitive = true }` | Hide value from CLI output |
+
+</CheatSection>
+
+<CheatSection title="State">
+
+| Command | What it does |
+|---------|-------------|
+| `terraform state list` | List all managed resources |
+| `terraform state show <address>` | Show attributes of one resource |
+| `terraform state mv <old> <new>` | Rename resource address in state |
+| `terraform state rm <address>` | Remove from state (keeps real resource) |
+| `terraform state pull` | Print raw state JSON |
+| `terraform import <address> <id>` | Import existing resource into state |
+| `terraform plan -refresh-only` | Show drift without changing resources |
+| `terraform workspace new <name>` | Create a new workspace |
+| `terraform workspace select <name>` | Switch workspace |
+
+</CheatSection>
+
+<CheatSection title="Modules">
+
+| Syntax | Purpose |
+|--------|---------|
+| `module "name" { source = "./path" }` | Call a local module |
+| `module "name" { source = "registry/module" version = "~>2.0" }` | Registry module (pinned) |
+| `module.name.output_name` | Reference a module output |
+| `module "name" { for_each = var.map }` | Create multiple module instances |
+| `moved { from = X to = module.Y.X }` | Refactor without destroy/recreate |
+
+</CheatSection>
+
+<CheatSection title="Meta-arguments">
+
+| Argument | Purpose |
+|----------|---------|
+| `count = 3` | Create N copies of a resource |
+| `for_each = var.map` | Create one resource per map entry |
+| `depends_on = [x.y]` | Explicit dependency ordering |
+| `lifecycle { create_before_destroy = true }` | Zero-downtime replacement |
+| `lifecycle { prevent_destroy = true }` | Block accidental destroy |
+| `lifecycle { ignore_changes = [tags] }` | Ignore specific attribute drift |
+| `terraform plan -replace="aws_instance.web"` | Force replacement (1.5+) |
+
+</CheatSection>
