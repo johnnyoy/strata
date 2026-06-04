@@ -1,0 +1,82 @@
+---
+title: JavaScript Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# JavaScript Cheat Sheet
+
+<CheatSection title="Promises & Async">
+
+| Pattern | Example |
+|---------|---------|
+| `async function` | `async function f() { return 1; }` |
+| `await` | `const x = await fetchData();` |
+| `try/catch` | `try { await f(); } catch(e) { }` |
+| `Promise.all` | `const [a, b] = await Promise.all([f(), g()]);` |
+| `Promise.allSettled` | Never rejects — gets all outcomes |
+| `Promise.race` | First to settle wins |
+| `Promise.any` | First to **resolve** wins |
+| AbortController | `const c = new AbortController(); fetch(url, {signal: c.signal})` |
+
+</CheatSection>
+
+<CheatSection title="Array Methods">
+
+| Method | What it does |
+|--------|-------------|
+| `.map(fn)` | Transform each element → new array |
+| `.filter(fn)` | Keep elements where fn returns true |
+| `.reduce(fn, init)` | Accumulate to single value |
+| `.find(fn)` | First element where fn is true |
+| `.findIndex(fn)` | Index of first match |
+| `.some(fn)` | True if any element passes fn |
+| `.every(fn)` | True if all elements pass fn |
+| `.flat(depth)` | Flatten nested arrays |
+| `.flatMap(fn)` | Map + flatten one level |
+| `.includes(x)` | True if x is in array |
+
+</CheatSection>
+
+<CheatSection title="Object Patterns">
+
+| Pattern | Example |
+|---------|---------|
+| Destructuring | `const {name, age} = user;` |
+| Rename | `const {name: n} = user;` |
+| Default | `const {age = 0} = user;` |
+| Rest | `const {a, ...rest} = obj;` |
+| Spread | `const copy = {...obj, extra: 1};` |
+| Optional chain | `user?.address?.city` |
+| Nullish coalesce | `user.age ?? 18` |
+| Short circuit | `isAdmin && doAdminThing()` |
+
+</CheatSection>
+
+<CheatSection title="Modern Syntax">
+
+| Syntax | Example |
+|--------|---------|
+| Arrow fn | `const add = (a, b) => a + b;` |
+| Template literal | `` `Hello ${name}` `` |
+| Default params | `function f(x = 10) {}` |
+| Rest params | `function f(...args) {}` |
+| Array destruct | `const [first, ...rest] = arr;` |
+| Dynamic import | `const m = await import('./m.js');` |
+| Nullish assign | `x ??= 'default';` |
+| Logical assign | `x \|\|= fallback;` |
+
+</CheatSection>
+
+<CheatSection title="Error Handling">
+
+| Pattern | When to use |
+|---------|------------|
+| `try { await f(); } catch(e) {}` | Handling async errors |
+| `promise.catch(e => ...)` | Chained error handling |
+| `process.on('unhandledRejection', ...)` | Node.js global handler |
+| `if (err) throw err;` | Fail fast in callbacks |
+| Custom error: `class AppError extends Error {}` | Typed errors |
+| `err.name === 'AbortError'` | Distinguish abort from real errors |
+
+</CheatSection>

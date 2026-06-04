@@ -1,0 +1,204 @@
+---
+title: AKS Workloads
+sidebar_label: Workloads
+sidebar_position: 3
+tutorials:
+  - label: "AKS ingress with NGINX"
+    url: https://learn.microsoft.com/en-us/azure/aks/ingress-basic
+  - label: "AKS storage options"
+    url: https://learn.microsoft.com/en-us/azure/aks/concepts-storage
+  - label: "Container Insights overview"
+    url: https://learn.microsoft.com/en-us/azure/azure-monitor/containers/container-insights-overview
+---
+
+# AKS Workloads
+
+<Level show="short">
+```bash
+# Deploy an app
+kubectl apply -f deployment.yaml
+
+# Expose via LoadBalancer (public Azure LB)
+kubectl expose deployment my-app --type=LoadBalancer --port=80
+
+# Install NGINX ingress controller
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+
+# Check external IP
+kubectl get svc -n ingress-nginx
+```
+</Level>
+
+<Level show="medium">
+**Exposing services**
+
+| Service type | How it works | Use case |
+|-------------|-------------|---------|
+| `ClusterIP` | Internal only | Service-to-service |
+| `NodePort` | Port on every node | Dev/test |
+| `LoadBalancer` | Azure public or internal LB | Direct public exposure |
+| `Ingress` | HTTP/HTTPS routing by host/path | Production web traffic |
+
+**NGINX Ingress controller**
+
+```bash
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace \
+  --set controller.replicaCount=2
+```
+
+Example Ingress rule:
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: myapp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-app
+                port:
+                  number: 80
+```
+
+**Persistent storage**
+
+```yaml
+# Dynamic provisioning with Azure Managed Disk (ReadWriteOnce)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-data
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: managed-premium
+  resources:
+    requests:
+      storage: 50Gi
+```
+
+For `ReadWriteMany` (multiple pods simultaneously), use Azure Files:
+```yaml
+storageClassName: azurefile-csi
+```
+
+**ACR image pull**
+
+After attaching ACR to the cluster (`az aks update --attach-acr`), reference images directly:
+```yaml
+image: myregistry.azurecr.io/myapp:v1.2.3
+```
+No `imagePullSecrets` needed — the node's managed identity handles authentication.
+</Level>
+
+<Level show="long">
+**Application Gateway Ingress Controller (AGIC)**
+
+AGIC is an AKS add-on that uses Azure Application Gateway as the ingress. Unlike NGINX (which is an in-cluster reverse proxy), AGIC programs the Application Gateway directly — traffic flows from the internet into Application Gateway without touching a pod first.
+
+Benefits:
+- Native Azure WAF (Web Application Firewall) integration
+- TLS termination at the Azure layer
+- Autoscaling (0 → N) handled by Azure, not Kubernetes pods
+
+```bash
+az aks enable-addons -g my-rg -n my-cluster \
+  --addons ingress-appgw \
+  --appgw-name my-appgw \
+  --appgw-subnet-cidr 10.2.0.0/16
+```
+
+**TLS / cert-manager**
+
+cert-manager automates TLS certificate issuance and renewal from Let's Encrypt (or any ACME-compatible CA):
+
+```bash
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager --create-namespace \
+  --set crds.enabled=true
+```
+
+```yaml
+# ClusterIssuer for Let's Encrypt
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+```
+
+**Storage class selection**
+
+| Storage class | Type | Access modes | Use case |
+|--------------|------|-------------|---------|
+| `managed-csi` | Azure Disk (HDD) | RWO | Dev, low-cost |
+| `managed-premium` | Azure Disk (SSD) | RWO | Production DBs |
+| `managed-csi-premium` | Azure Disk Premium v2 | RWO | High IOPS DBs |
+| `azurefile-csi` | Azure Files (SMB) | RWX | Shared config, legacy apps |
+| `azurefile-csi-premium` | Azure Files Premium | RWX | High-throughput shared |
+
+**Container Insights (monitoring)**
+
+When enabled, Container Insights deploys the `ama-logs` DaemonSet which streams container logs and performance metrics to a Log Analytics workspace. Useful KQL queries:
+
+```kql
+// CPU by namespace
+KubePodInventory
+| where TimeGenerated > ago(1h)
+| join kind=inner (
+    Perf
+    | where ObjectName == "K8SContainer"
+    | summarize AvgCPU=avg(CounterValue) by InstanceName, bin(TimeGenerated, 5m)
+) on $left.ContainerID == $right.InstanceName
+| summarize AvgCPU=avg(AvgCPU) by Namespace, bin(TimeGenerated, 5m)
+```
+
+**Workload Identity in practice**
+
+A pod that needs to read from Azure Key Vault:
+
+```yaml
+# Service account annotated with the managed identity client ID
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-app-sa
+  annotations:
+    azure.workload.identity/client-id: "<client-id>"
+```
+
+```yaml
+# Pod references the SA and opts into workload identity
+spec:
+  serviceAccountName: my-app-sa
+  labels:
+    azure.workload.identity/use: "true"
+  containers:
+    - name: app
+      env:
+        - name: AZURE_CLIENT_ID
+          value: "<client-id>"
+```
+
+The Azure Identity SDK picks up `AZURE_FEDERATED_TOKEN_FILE` (injected by the webhook) and exchanges it for an Azure AD token transparently.
+</Level>

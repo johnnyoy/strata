@@ -1,0 +1,9 @@
+{
+  "label": "Flux",
+  "position": 8,
+  "link": {
+    "type": "generated-index",
+    "slug": "/flux",
+    "description": "GitOps with Flux — continuous delivery where Git is the single source of truth for your cluster state."
+  }
+}

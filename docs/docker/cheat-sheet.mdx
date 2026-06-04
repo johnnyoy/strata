@@ -1,0 +1,91 @@
+---
+title: Docker Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# Docker Cheat Sheet
+
+<CheatSection title="Images">
+
+| Command | What it does |
+|---------|-------------|
+| `docker images` | List local images |
+| `docker pull ubuntu:22.04` | Download image |
+| `docker build -t myapp:1.0 .` | Build from Dockerfile |
+| `docker build --no-cache -t myapp .` | Build without cache |
+| `docker rmi myapp:1.0` | Remove image |
+| `docker image prune` | Remove dangling images |
+| `docker inspect myapp:1.0` | Image metadata |
+
+</CheatSection>
+
+<CheatSection title="Containers">
+
+| Command | What it does |
+|---------|-------------|
+| `docker run -it ubuntu bash` | Interactive shell |
+| `docker run -d -p 8080:80 nginx` | Detached + port map |
+| `docker ps` | Running containers |
+| `docker ps -a` | All containers (incl. stopped) |
+| `docker stop <id>` | Graceful stop (SIGTERM) |
+| `docker kill <id>` | Force stop (SIGKILL) |
+| `docker rm <id>` | Remove stopped container |
+| `docker rm -f <id>` | Force remove running container |
+| `docker logs <id> -f` | Follow stdout/stderr |
+| `docker exec -it <id> bash` | Shell into running container |
+| `docker cp <id>:/app/file .` | Copy file from container |
+
+</CheatSection>
+
+<CheatSection title="Dockerfile">
+
+| Instruction | Purpose |
+|-------------|---------|
+| `FROM node:20-alpine` | Base image |
+| `WORKDIR /app` | Set working directory |
+| `COPY package*.json ./` | Copy files (before code for cache) |
+| `RUN npm ci` | Run command in layer |
+| `COPY . .` | Copy source (after deps) |
+| `EXPOSE 3000` | Document port (informational) |
+| `CMD ["node", "server.js"]` | Default run command |
+| `ENV NODE_ENV=production` | Set env variable |
+
+</CheatSection>
+
+<CheatSection title="Networking">
+
+| Command | What it does |
+|---------|-------------|
+| `docker network create mynet` | Create user-defined network |
+| `docker run --network mynet --name db postgres` | Attach to network |
+| `docker network ls` | List networks |
+| `docker network inspect mynet` | Network details |
+
+</CheatSection>
+
+<CheatSection title="Volumes">
+
+| Command | What it does |
+|---------|-------------|
+| `docker volume create mydata` | Create named volume |
+| `docker run -v mydata:/var/lib/data img` | Mount named volume |
+| `docker run -v $(pwd):/app img` | Bind mount |
+| `docker volume ls` | List volumes |
+| `docker volume rm mydata` | Remove volume |
+
+</CheatSection>
+
+<CheatSection title="Docker Compose">
+
+| Command | What it does |
+|---------|-------------|
+| `docker compose up -d` | Start services detached |
+| `docker compose down` | Stop + remove containers |
+| `docker compose down -v` | Also remove volumes |
+| `docker compose logs -f` | Follow all service logs |
+| `docker compose exec web bash` | Shell into service |
+| `docker compose ps` | Status of services |
+| `docker compose build` | Rebuild images |
+
+</CheatSection>

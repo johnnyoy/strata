@@ -88,6 +88,10 @@ const config: Config = {
             {label: 'Linux', to: '/docs/linux'},
             {label: 'JavaScript', to: '/docs/javascript'},
             {label: 'SQL', to: '/docs/sql'},
+            {label: 'Kubectl', to: '/docs/kubectl'},
+            {label: 'AKS', to: '/docs/aks'},
+            {label: 'Flux', to: '/docs/flux'},
+            {label: 'CLI Commands', to: '/docs/cli'},
           ],
         },
         {

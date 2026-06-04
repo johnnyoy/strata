@@ -1,0 +1,173 @@
+---
+title: Flux Overview
+sidebar_label: Overview
+sidebar_position: 1
+tutorials:
+  - label: "Flux documentation"
+    url: https://fluxcd.io/flux/
+  - label: "GitOps principles"
+    url: https://opengitops.dev/
+  - label: "Flux architecture"
+    url: https://fluxcd.io/flux/concepts/
+---
+
+# Flux Overview
+
+<Level show="short">
+Flux is a GitOps tool: it watches a Git repo and keeps your Kubernetes cluster in sync with it. Any change you push to Git gets applied to the cluster automatically.
+
+Core objects:
+- `GitRepository` — points to a Git repo + branch
+- `Kustomization` — applies a path in that repo to the cluster
+- `HelmRelease` — manages a Helm chart release
+</Level>
+
+<Level show="medium">
+**The GitOps model**
+
+Instead of running `kubectl apply` from a CI pipeline, you push YAML to Git. Flux (running inside the cluster) detects the change and applies it. The cluster continuously reconciles toward the desired state in Git.
+
+Benefits:
+- Git is the audit log — every change has a commit, author, and timestamp
+- Rollback = `git revert`
+- No CI pipeline needs cluster credentials
+- Drift detection — if someone manually changes the cluster, Flux reverts it
+
+**Core controllers**
+
+| Controller | Manages |
+|-----------|---------|
+| Source Controller | Fetches from Git, Helm repos, OCI registries |
+| Kustomize Controller | Applies Kustomize overlays and plain YAML |
+| Helm Controller | Manages Helm chart releases |
+| Notification Controller | Sends alerts (Slack, Teams, GitHub status) |
+| Image Automation | Updates image tags in Git when new images are pushed |
+
+**Key objects**
+
+```yaml
+# Source: points to your Git repo
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: my-fleet
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/my-org/my-fleet
+  ref:
+    branch: main
+```
+
+```yaml
+# Kustomization: applies a path from that repo
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: my-fleet
+  path: ./clusters/production
+  prune: true       # delete resources removed from Git
+  wait: true        # wait for resources to be ready
+```
+</Level>
+
+<Level show="long">
+**Reconciliation loop**
+
+Flux controllers run a continuous reconciliation loop:
+
+1. **Source Controller** fetches the Git repo (or Helm index) on the configured interval and produces an `Artifact` — a tarball with a checksum stored in the cluster.
+2. **Kustomize/Helm Controller** watches for new artifacts. When one arrives (new commit or chart version), it applies the change to the cluster.
+3. If the actual cluster state drifts from the desired state (e.g., someone ran `kubectl edit`), the controller re-applies on the next reconciliation cycle, reverting the drift.
+
+**Multi-tenancy model**
+
+Flux supports multi-tenancy through namespace isolation:
+- Each team gets their own `GitRepository` and `Kustomization` in their namespace
+- `ServiceAccount` + `RoleBinding` limit what each team's Kustomization can touch
+- The `flux-system` namespace holds the root bootstrap configuration
+
+```yaml
+spec:
+  serviceAccountName: my-team-sa   # scopes what Flux can apply
+```
+
+**Dependency ordering**
+
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+spec:
+  dependsOn:
+    - name: infrastructure   # don't apply apps until infrastructure is ready
+```
+
+**Image update automation**
+
+Flux can watch an image registry and open PRs (or push commits) to update image tags in Git when new images are published:
+
+1. `ImageRepository` — polls the registry for new tags
+2. `ImagePolicy` — selects which tags to use (semver, latest, regex)
+3. `ImageUpdateAutomation` — commits the updated tag back to Git
+
+```yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: my-app
+spec:
+  imageRepositoryRef:
+    name: my-app
+  policy:
+    semver:
+      range: ">=1.0.0 <2.0.0"
+```
+
+**Notification Controller**
+
+Send alerts on reconciliation failures or successes:
+
+```yaml
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: on-call-slack
+spec:
+  providerRef:
+    name: slack-webhook
+  eventSeverity: error
+  eventSources:
+    - kind: Kustomization
+      name: "*"
+```
+
+**Bootstrapping internals**
+
+`flux bootstrap` does the following:
+1. Creates the `flux-system` namespace and RBAC
+2. Installs the Flux controllers as Deployments
+3. Creates a `GitRepository` pointing at your bootstrap repo
+4. Creates a `Kustomization` pointing at the `flux-system` path
+5. Commits the Flux manifests to your Git repo — Flux now manages itself
+
+From this point, Flux is self-managing: if you update the Flux version in Git, Flux upgrades itself.
+
+**Comparison with Argo CD**
+
+| | Flux | Argo CD |
+|--|------|---------|
+| UI | No (use CLI + Grafana dashboards) | Yes (rich web UI) |
+| Multi-tenancy | Namespace-based | Projects + AppProject |
+| Helm support | First-class HelmRelease CRD | App of Apps pattern |
+| Image automation | Built-in | External (Argo CD Image Updater) |
+| GitOps model | Push-based (watches Git) | Pull-based (same) |
+| Architecture | Multiple controllers | Single controller + Dex |
+</Level>

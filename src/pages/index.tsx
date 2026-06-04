@@ -35,6 +35,30 @@ const TOPICS = [
     icon: '⊏⊐',
     desc: 'Queries, joins, indexes, window functions, and transactions.',
   },
+  {
+    name: 'Kubectl',
+    path: '/docs/kubectl',
+    icon: '☸',
+    desc: 'Kubernetes CLI — contexts, workloads, logs, exec, and debugging.',
+  },
+  {
+    name: 'AKS',
+    path: '/docs/aks',
+    icon: 'Az',
+    desc: 'Azure Kubernetes Service — clusters, node pools, ingress, and storage.',
+  },
+  {
+    name: 'Flux',
+    path: '/docs/flux',
+    icon: '⟳',
+    desc: 'GitOps with Flux — sync your cluster state from a Git repository.',
+  },
+  {
+    name: 'CLI Commands',
+    path: '/docs/cli',
+    icon: '$_',
+    desc: 'grep, vim, htop — the essential command-line tools explained.',
+  },
 ];
 
 function Hero() {

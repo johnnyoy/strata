@@ -1,0 +1,149 @@
+---
+title: Linux Processes
+sidebar_label: Processes
+sidebar_position: 2
+tutorials:
+  - label: "Linux processes (Arch Wiki)"
+    url: https://wiki.archlinux.org/title/Process
+  - label: "systemctl tutorial"
+    url: https://www.digitalocean.com/community/tutorials/how-to-use-systemctl-to-manage-systemd-services-and-units
+---
+
+# Linux Processes
+
+<Level show="short">
+```bash
+ps aux                          # snapshot of all processes
+kill 1234                       # send SIGTERM (graceful stop)
+kill -9 1234                    # send SIGKILL (force kill)
+pkill nginx                     # kill by name
+systemctl status nginx          # service status
+systemctl restart nginx         # restart service
+```
+</Level>
+
+<Level show="medium">
+**Listing processes**
+
+```bash
+ps aux               # all processes: user, PID, CPU%, MEM%, command
+ps -ef               # full format: UID, PID, PPID, start time, command
+ps aux | grep nginx  # filter by name
+pgrep nginx          # just PIDs of matching processes
+pgrep -a nginx       # PID + full command line
+```
+
+**Signals**
+
+```bash
+kill 1234             # SIGTERM (15) — graceful shutdown
+kill -9 1234          # SIGKILL — force (unblockable, no cleanup)
+kill -HUP 1234        # SIGHUP (1) — reload config for many daemons
+killall nginx         # kill all processes named nginx
+pkill -f "python app" # kill by full command line match
+```
+
+**Systemd services**
+
+```bash
+systemctl status nginx
+systemctl start / stop / restart / reload nginx
+systemctl enable nginx       # start on boot
+systemctl disable nginx      # don't start on boot
+systemctl is-active nginx    # returns exit 0 if active
+journalctl -u nginx          # logs for this unit
+journalctl -u nginx -f       # follow logs
+journalctl -u nginx --since "1 hour ago"
+```
+
+**Background jobs**
+
+```bash
+command &            # run in background
+Ctrl+Z               # suspend foreground job
+jobs                 # list background/suspended jobs
+fg %1                # bring job 1 to foreground
+bg %1                # resume job 1 in background
+nohup command &      # run immune to hangup (survives logout)
+disown %1            # detach job from shell (won't be killed on logout)
+```
+</Level>
+
+<Level show="long">
+**Process tree and relationships**
+
+Every process has a parent (PPID). The init process (PID 1, now `systemd` on modern Linux) is the ancestor of everything. When a process exits, its children are reparented to PID 1.
+
+```bash
+pstree               # visual tree
+pstree -p            # include PIDs
+pstree -u            # include usernames
+ps axjf              # ASCII tree in ps output
+```
+
+**Zombie processes**
+
+A zombie is a process that has exited but whose exit status hasn't been read by the parent (`wait()` not called). They appear as state `Z` in `ps`. Zombies don't consume CPU/memory but occupy a PID. They disappear when the parent reads the exit status or when the parent dies (reparented to init, which calls `wait()`).
+
+You can't kill a zombie directly. If you see many zombies, the parent process has a bug.
+
+**Process priority (nice)**
+
+```bash
+nice -n 10 command      # start with nice value 10 (lower priority)
+renice 10 -p 1234       # change nice value of running process
+renice -5 -u www-data   # change for all processes of a user
+```
+
+Nice range: -20 (highest priority) to 19 (lowest). Regular users can only increase nice (lower priority). Root can set any value.
+
+**Real-time scheduling**: `chrt -r 50 command` (SCHED_RR, round-robin) or `chrt -f 50 command` (SCHED_FIFO) bypass the normal scheduler. Use only for latency-critical tasks.
+
+**Process limits (ulimit)**
+
+```bash
+ulimit -a                  # show all limits for current shell
+ulimit -n 65535            # set open file descriptor limit
+ulimit -u 1024             # max user processes
+
+# Permanent limits: /etc/security/limits.conf
+www-data  soft  nofile  65535
+www-data  hard  nofile  65535
+```
+
+**cgroups (resource control)**
+
+Systemd uses cgroups v2 to limit resources per service:
+
+```ini
+# /etc/systemd/system/myapp.service
+[Service]
+MemoryMax=512M
+CPUQuota=50%
+TasksMax=100
+```
+
+```bash
+systemctl set-property nginx.service MemoryMax=256M   # live change
+systemd-cgtop                                          # cgroup resource usage
+```
+
+**strace (what is a process doing?)**
+
+```bash
+strace -p 1234               # trace syscalls of running process
+strace -e open,read command  # trace specific syscalls
+strace -c command            # count syscall frequency
+```
+
+`strace` is invaluable for debugging hangs (look for blocking `read()` or `futex()` calls) and missing files (`open()` returning `ENOENT`).
+
+**lsof (open files and sockets)**
+
+```bash
+lsof -p 1234          # all files opened by process
+lsof -i :8080         # which process is listening on port 8080
+lsof -u www-data      # all files opened by user
+lsof /var/log/app.log # which processes have this file open
+```
+</Level>

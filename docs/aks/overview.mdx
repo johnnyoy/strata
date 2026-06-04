@@ -1,0 +1,132 @@
+---
+title: AKS Overview
+sidebar_label: Overview
+sidebar_position: 1
+tutorials:
+  - label: "AKS documentation"
+    url: https://learn.microsoft.com/en-us/azure/aks/
+  - label: "AKS best practices"
+    url: https://learn.microsoft.com/en-us/azure/aks/best-practices
+  - label: "AKS baseline architecture"
+    url: https://learn.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks/baseline-aks
+---
+
+# AKS Overview
+
+<Level show="short">
+AKS (Azure Kubernetes Service) is Microsoft's managed Kubernetes offering. Azure manages the control plane (API server, etcd, scheduler) for free — you pay only for the worker nodes.
+
+```bash
+az aks create -g my-rg -n my-cluster --node-count 3 --generate-ssh-keys
+az aks get-credentials -g my-rg -n my-cluster   # merge kubeconfig
+kubectl get nodes
+```
+</Level>
+
+<Level show="medium">
+**What AKS manages for you**
+
+| Component | Azure manages | You manage |
+|-----------|-------------|-----------|
+| Control plane | API server, etcd, scheduler, controller manager | — |
+| Worker nodes | OS patching (auto-upgrade), node provisioning | App workloads, node pool config |
+| Networking | VNet integration, load balancers | Ingress, network policies |
+| Identity | Entra ID (AAD) integration, managed identities | RBAC bindings |
+
+**Node pools**
+
+A cluster has one system node pool (runs core Kubernetes workloads like CoreDNS) and optionally multiple user node pools for your apps. You can mix VM sizes, OS types, and spot instances across pools.
+
+```bash
+az aks nodepool add \
+  --resource-group my-rg \
+  --cluster-name my-cluster \
+  --name gpupool \
+  --node-vm-size Standard_NC6s_v3 \
+  --node-count 2
+```
+
+**Managed identity**
+
+AKS clusters use a system-assigned or user-assigned managed identity to call Azure APIs (create load balancers, pull ACR images, manage DNS). No service principal secrets to rotate.
+
+**Networking models**
+
+| Model | Description | When to use |
+|-------|-------------|------------|
+| Kubenet | Simple NAT; nodes get VNet IPs, pods get private IPs | Small clusters, cost-sensitive |
+| Azure CNI | Pods get real VNet IPs | When pods need direct VNet access, peering |
+| Azure CNI Overlay | Pods get overlay IPs, lower VNet IP consumption | Large clusters |
+| Cilium | eBPF-based, replaces kube-proxy | High performance, advanced network policy |
+</Level>
+
+<Level show="long">
+**Control plane architecture**
+
+AKS runs the Kubernetes control plane as a managed Azure service in a Microsoft-owned subscription. You never see the control plane VMs. The control plane is:
+- **Regionally redundant**: etcd is replicated across availability zones in supported regions
+- **SLA-backed**: 99.95% uptime SLA for clusters using Availability Zones (99.9% without)
+- **Free**: the control plane doesn't appear in your bill
+
+**Node pool types and VM families**
+
+| Pool type | Use case | Example SKU |
+|-----------|---------|-------------|
+| System | CoreDNS, metrics-server, konnectivity | Standard_D2ds_v5 |
+| User — general | Web apps, APIs | Standard_D4ds_v5 |
+| User — memory | Databases, caches | Standard_E8ds_v5 |
+| User — GPU | ML inference | Standard_NC6s_v3 |
+| User — spot | Batch, fault-tolerant workloads | Any (with `--priority Spot`) |
+
+**Cluster autoscaler**
+
+AKS integrates the Kubernetes cluster autoscaler. When pods are `Pending` due to insufficient resources, the autoscaler adds nodes; when nodes are underutilised for a configurable period, they're drained and removed.
+
+```bash
+az aks nodepool update \
+  --resource-group my-rg \
+  --cluster-name my-cluster \
+  --name nodepool1 \
+  --enable-cluster-autoscaler \
+  --min-count 2 \
+  --max-count 10
+```
+
+**Entra ID (AAD) integration**
+
+With AKS-managed Azure AD integration, cluster access is controlled by Entra ID groups. Users authenticate with `kubelogin` (a kubectl credential plugin) via device code flow or service principal.
+
+```bash
+az aks get-credentials -g my-rg -n my-cluster
+kubelogin convert-kubeconfig -l azurecli   # convert to interactive login
+kubectl get nodes    # prompts for browser auth on first use
+```
+
+**Workload Identity**
+
+Modern replacement for pod identity (AAD Pod Identity, now deprecated). Kubernetes service accounts are federated with Entra ID workload identities. Pods get Azure credentials without any secrets — the kubelet exchanges a signed service account token for an Azure AD token via OIDC.
+
+```bash
+az aks update --resource-group my-rg --name my-cluster --enable-oidc-issuer --enable-workload-identity
+```
+
+**Container Registry integration**
+
+Attach ACR to the cluster so nodes can pull images without managing pull secrets:
+
+```bash
+az aks update --resource-group my-rg --name my-cluster --attach-acr my-acr
+```
+
+This grants the cluster's managed identity `AcrPull` on the registry.
+
+**Upgrade strategy**
+
+Kubernetes releases are supported for ~14 months in AKS. Auto-upgrade channels: `node-image` (just OS/node images), `patch` (patch versions), `stable`, `rapid`, `none`. Enable maintenance windows to control when upgrades apply:
+
+```bash
+az aks update -g my-rg -n my-cluster --auto-upgrade-channel stable
+az aks maintenanceconfiguration add -g my-rg --cluster-name my-cluster \
+  --name default --weekday Saturday --start-hour 2
+```
+</Level>

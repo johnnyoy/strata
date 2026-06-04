@@ -1,0 +1,78 @@
+---
+title: Flux Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# Flux Cheat Sheet
+
+<CheatSection title="Bootstrap">
+
+| Command | What it does |
+|---------|-------------|
+| `flux check --pre` | Verify cluster prerequisites |
+| `flux bootstrap github --owner=<org> --repository=<repo> --path=clusters/prod` | Bootstrap to GitHub |
+| `flux check` | Compare installed version vs CLI |
+| `flux install` | Install Flux without bootstrapping |
+| `flux uninstall` | Remove Flux from cluster |
+
+</CheatSection>
+
+<CheatSection title="Sources">
+
+| Command | What it does |
+|---------|-------------|
+| `flux get sources git` | List GitRepository objects |
+| `flux get sources helm` | List HelmRepository objects |
+| `flux reconcile source git flux-system` | Force Git pull now |
+| `flux create source git my-repo --url=https://... --branch=main` | Create source |
+| `flux export source git flux-system` | Export as YAML |
+
+</CheatSection>
+
+<CheatSection title="Kustomizations">
+
+| Command | What it does |
+|---------|-------------|
+| `flux get kustomizations` | List Kustomizations |
+| `flux reconcile kustomization apps` | Force apply now |
+| `flux suspend kustomization apps` | Stop reconciling |
+| `flux resume kustomization apps` | Resume reconciling |
+| `flux trace my-deploy --kind=Deployment --namespace=default` | Trace resource to source |
+
+</CheatSection>
+
+<CheatSection title="Helm Releases">
+
+| Command | What it does |
+|---------|-------------|
+| `flux get helmreleases -A` | List all HelmReleases |
+| `flux reconcile helmrelease my-app -n my-ns` | Force upgrade now |
+| `flux suspend helmrelease my-app -n my-ns` | Pause Helm management |
+| `helm history my-app -n my-ns` | Helm release history |
+| `helm get values my-app -n my-ns` | Applied values |
+
+</CheatSection>
+
+<CheatSection title="Monitoring & Troubleshooting">
+
+| Command | What it does |
+|---------|-------------|
+| `flux get all` | Overview of all Flux objects |
+| `flux events --watch` | Live event stream |
+| `flux logs --follow --level=error` | Controller error logs |
+| `flux events --for Kustomization/apps` | Events for specific resource |
+| `kubectl describe kustomization apps -n flux-system` | Detailed conditions |
+
+</CheatSection>
+
+<CheatSection title="Image Automation">
+
+| Command | What it does |
+|---------|-------------|
+| `flux get image repository` | List image repositories |
+| `flux get image policy` | List image policies |
+| `flux reconcile image repository my-app` | Force image tag scan |
+| `flux get image update` | List image update automations |
+
+</CheatSection>

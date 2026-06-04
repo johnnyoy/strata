@@ -1,0 +1,152 @@
+---
+title: Kubectl Workloads
+sidebar_label: Workloads
+sidebar_position: 2
+tutorials:
+  - label: "Kubernetes Workloads concepts"
+    url: https://kubernetes.io/docs/concepts/workloads/
+  - label: "kubectl for debugging"
+    url: https://kubernetes.io/docs/tasks/debug/debug-application/
+---
+
+# Kubectl Workloads
+
+<Level show="short">
+```bash
+kubectl logs my-pod                        # stdout/stderr
+kubectl logs my-pod -f                     # follow (tail -f)
+kubectl logs my-pod -c my-container        # specific container
+kubectl exec -it my-pod -- bash            # shell into pod
+kubectl port-forward pod/my-pod 8080:80    # local port → pod port
+kubectl rollout status deployment/my-app   # watch rollout
+```
+</Level>
+
+<Level show="medium">
+**Logs**
+
+```bash
+kubectl logs my-pod                         # current logs
+kubectl logs my-pod --previous              # logs from crashed container
+kubectl logs -l app=frontend --all-pods     # all pods matching label
+kubectl logs my-pod --since=1h             # last hour
+kubectl logs my-pod --tail=100             # last 100 lines
+```
+
+**Exec (shell into a running pod)**
+
+```bash
+kubectl exec -it my-pod -- bash
+kubectl exec -it my-pod -c sidecar -- sh   # specific container
+kubectl exec my-pod -- env                 # run single command
+kubectl exec my-pod -- cat /etc/config.yaml
+```
+
+**Port-forward (local access to cluster services)**
+
+```bash
+kubectl port-forward pod/my-pod 8080:80          # pod port
+kubectl port-forward svc/my-service 8080:80      # service port
+kubectl port-forward deployment/my-app 8080:80   # deployment port
+```
+The tunnel lives as long as the `kubectl` process runs. Use for debugging; not for production traffic.
+
+**Deployments and rollouts**
+
+```bash
+kubectl rollout status deployment/my-app         # watch progress
+kubectl rollout history deployment/my-app        # revision history
+kubectl rollout undo deployment/my-app           # rollback to previous
+kubectl rollout undo deployment/my-app --to-revision=3
+kubectl set image deployment/my-app app=myrepo/app:v2  # trigger rollout
+kubectl scale deployment/my-app --replicas=5     # scale
+```
+
+**Copying files**
+
+```bash
+kubectl cp my-pod:/app/logs/app.log ./app.log    # pod → local
+kubectl cp ./config.yaml my-pod:/app/config.yaml # local → pod
+```
+</Level>
+
+<Level show="long">
+**Pod lifecycle and restarts**
+
+A pod goes through phases: `Pending` → `Running` → (`Succeeded` | `Failed`). The container state can be `Waiting`, `Running`, or `Terminated`. Common `Waiting` reasons:
+
+| Reason | Cause |
+|--------|-------|
+| `ContainerCreating` | Image pull in progress |
+| `ImagePullBackOff` | Image not found or registry auth failed |
+| `CrashLoopBackOff` | Container starts and crashes repeatedly |
+| `OOMKilled` | Container exceeded memory limit |
+| `ErrImagePull` | First pull failure (before backoff) |
+
+```bash
+kubectl describe pod my-pod    # look at Events section at the bottom
+kubectl get pod my-pod -o jsonpath='{.status.containerStatuses[*].state}'
+```
+
+**Exec without bash**
+
+Many production images (distroless, scratch-based) have no shell. Options:
+```bash
+# Ephemeral debug container (K8s 1.23+)
+kubectl debug -it my-pod --image=busybox --target=app-container
+
+# Copy pod spec and add debug container
+kubectl debug my-pod -it --image=ubuntu --share-processes --copy-to=debug-pod
+```
+
+**Streaming logs at scale**
+
+`kubectl logs` works for single pods. For production log aggregation use:
+- Stern: `stern my-app` — streams logs from all pods matching a pattern, colour-coded by pod
+- `kubectl logs -l app=my-app --all-pods --max-log-requests=20` — built-in but limited
+
+**Rollout internals**
+
+A `Deployment` manages a `ReplicaSet`, which manages `Pods`. During a rolling update:
+1. A new `ReplicaSet` is created with the new pod template
+2. Pods are gradually scaled up in the new RS while old RS scales down
+3. Controlled by `maxSurge` and `maxUnavailable` in the deployment strategy
+
+```yaml
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1          # allow 1 extra pod above desired count
+    maxUnavailable: 0    # never go below desired count
+```
+
+`Recreate` strategy (all old pods die before new ones start) causes downtime but avoids having two versions running simultaneously — useful for stateful apps that can't run two versions at once.
+
+**Resource requests and limits**
+
+```bash
+kubectl top pods                      # CPU/memory usage (requires metrics-server)
+kubectl top pods --sort-by=cpu
+kubectl top nodes
+```
+
+Every pod should have `requests` (scheduling hint) and `limits` (hard cap). Containers exceeding memory limits are OOM-killed; containers exceeding CPU limits are throttled (not killed).
+
+**Jobs and CronJobs**
+
+```bash
+kubectl get jobs
+kubectl logs job/my-job                     # logs from job pod
+kubectl create job test --from=cronjob/my-cron  # manual trigger
+```
+
+**Horizontal Pod Autoscaler**
+
+```bash
+kubectl get hpa
+kubectl describe hpa my-app
+kubectl autoscale deployment my-app --min=2 --max=10 --cpu-percent=60
+```
+
+HPA queries the metrics API every 15s (default) and adjusts replica count. Requires `metrics-server` for CPU/memory. Custom metrics require Prometheus Adapter or KEDA.
+</Level>

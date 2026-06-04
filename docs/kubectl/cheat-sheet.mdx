@@ -1,0 +1,99 @@
+---
+title: Kubectl Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# Kubectl Cheat Sheet
+
+<CheatSection title="Config & Context">
+
+| Command | What it does |
+|---------|-------------|
+| `kubectl config get-contexts` | List all contexts |
+| `kubectl config current-context` | Show active context |
+| `kubectl config use-context <ctx>` | Switch context |
+| `kubectl config set-context --current --namespace=<ns>` | Change default namespace |
+| `KUBECONFIG=~/.kube/a:~/.kube/b kubectl config view --merge` | Merge kubeconfigs |
+
+</CheatSection>
+
+<CheatSection title="Getting Resources">
+
+| Command | What it does |
+|---------|-------------|
+| `kubectl get pods` | List pods in current namespace |
+| `kubectl get pods -A` | All namespaces |
+| `kubectl get pods -o wide` | Include node + IP |
+| `kubectl get pods -l app=web` | Filter by label |
+| `kubectl get pod <name> -o yaml` | Full YAML |
+| `kubectl describe pod <name>` | Detail + events |
+| `kubectl get po,svc,deploy` | Multiple types at once |
+| `kubectl get events --sort-by=.lastTimestamp` | Recent events |
+
+</CheatSection>
+
+<CheatSection title="Apply / Delete">
+
+| Command | What it does |
+|---------|-------------|
+| `kubectl apply -f file.yaml` | Create or update |
+| `kubectl apply -f ./dir/` | Apply whole directory |
+| `kubectl delete -f file.yaml` | Delete from manifest |
+| `kubectl delete pod <name>` | Delete by name |
+| `kubectl delete pod <name> --force --grace-period=0` | Force delete |
+| `kubectl apply -f file.yaml --dry-run=server` | Validate without applying |
+| `kubectl diff -f file.yaml` | Show pending changes |
+
+</CheatSection>
+
+<CheatSection title="Logs & Exec">
+
+| Command | What it does |
+|---------|-------------|
+| `kubectl logs <pod>` | Stdout/stderr |
+| `kubectl logs <pod> -f` | Follow (stream) |
+| `kubectl logs <pod> --previous` | Last crashed container |
+| `kubectl logs <pod> --since=1h --tail=200` | Time + line limit |
+| `kubectl logs -l app=web --all-pods` | All matching pods |
+| `kubectl exec -it <pod> -- bash` | Interactive shell |
+| `kubectl exec <pod> -- env` | Single command |
+| `kubectl debug -it <pod> --image=busybox --target=<c>` | Debug container |
+
+</CheatSection>
+
+<CheatSection title="Port Forward">
+
+| Command | What it does |
+|---------|-------------|
+| `kubectl port-forward pod/<name> 8080:80` | Pod port |
+| `kubectl port-forward svc/<name> 8080:80` | Service port |
+| `kubectl port-forward deploy/<name> 8080:80` | Deployment port |
+
+</CheatSection>
+
+<CheatSection title="Rollouts & Scaling">
+
+| Command | What it does |
+|---------|-------------|
+| `kubectl rollout status deploy/<name>` | Watch rollout |
+| `kubectl rollout history deploy/<name>` | Revision history |
+| `kubectl rollout undo deploy/<name>` | Rollback |
+| `kubectl rollout undo deploy/<name> --to-revision=2` | Rollback to revision |
+| `kubectl set image deploy/<name> app=image:v2` | Trigger new rollout |
+| `kubectl scale deploy/<name> --replicas=5` | Scale |
+| `kubectl top pods` | Live CPU/memory |
+
+</CheatSection>
+
+<CheatSection title="Debugging">
+
+| Command | What it does |
+|---------|-------------|
+| `kubectl get endpoints <svc>` | Check service → pod wiring |
+| `kubectl get pod <name> -o jsonpath='{.status.phase}'` | Extract field |
+| `kubectl auth can-i list pods --as=system:serviceaccount:default:sa` | Test RBAC |
+| `kubectl run tmp --image=nicolaka/netshoot --rm -it --restart=Never -- bash` | Temp debug pod |
+| `kubectl describe resourcequota -n <ns>` | Check quota |
+
+</CheatSection>
