@@ -1,0 +1,271 @@
+---
+title: Instrumentation
+sidebar_label: Instrumentation
+sidebar_position: 2
+tutorials:
+  - label: "OTel instrumentation guides"
+    url: https://opentelemetry.io/docs/languages/
+  - label: "Auto-instrumentation"
+    url: https://opentelemetry.io/docs/zero-code/
+  - label: "Semantic conventions"
+    url: https://opentelemetry.io/docs/specs/semconv/
+---
+
+# Instrumentation
+
+<Level show="short">
+**Auto-instrumentation** adds tracing to common libraries (HTTP, DB, gRPC) with no code changes:
+
+```bash
+# Python
+pip install opentelemetry-distro opentelemetry-exporter-otlp
+opentelemetry-bootstrap -a install
+opentelemetry-instrument --service-name my-service python app.py
+```
+
+```bash
+# Node.js
+npm install @opentelemetry/auto-instrumentations-node
+node --require @opentelemetry/auto-instrumentations-node/register app.js
+```
+
+```bash
+# Go — use zero-code agent or SDK
+OTEL_SERVICE_NAME=my-service OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ./myapp
+```
+</Level>
+
+<Level show="medium">
+**SDK setup — Go**
+
+```go
+import (
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+    "go.opentelemetry.io/otel/sdk/resource"
+    sdktrace "go.opentelemetry.io/otel/sdk/trace"
+    semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+)
+
+func initTracer(ctx context.Context) (*sdktrace.TracerProvider, error) {
+    exporter, err := otlptracegrpc.New(ctx,
+        otlptracegrpc.WithEndpoint("localhost:4317"),
+        otlptracegrpc.WithInsecure(),
+    )
+    if err != nil {
+        return nil, err
+    }
+
+    res := resource.NewWithAttributes(
+        semconv.SchemaURL,
+        semconv.ServiceName("order-service"),
+        semconv.ServiceVersion("1.2.3"),
+        semconv.DeploymentEnvironment("production"),
+    )
+
+    tp := sdktrace.NewTracerProvider(
+        sdktrace.WithBatcher(exporter),
+        sdktrace.WithResource(res),
+    )
+    otel.SetTracerProvider(tp)
+    return tp, nil
+}
+```
+
+**Creating spans — Go**
+
+```go
+tracer := otel.Tracer("order-service")
+
+func processOrder(ctx context.Context, orderID string) error {
+    ctx, span := tracer.Start(ctx, "processOrder",
+        trace.WithAttributes(
+            attribute.String("order.id", orderID),
+        ),
+    )
+    defer span.End()
+
+    // Add events (timestamped annotations)
+    span.AddEvent("validation started")
+
+    if err := validate(ctx, orderID); err != nil {
+        span.RecordError(err)
+        span.SetStatus(codes.Error, err.Error())
+        return err
+    }
+
+    span.AddEvent("validation passed")
+    span.SetAttributes(attribute.Bool("order.valid", true))
+
+    return charge(ctx, orderID)
+}
+```
+
+**SDK setup — Python**
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+resource = Resource(attributes={SERVICE_NAME: "order-service"})
+provider = TracerProvider(resource=resource)
+
+exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
+provider.add_span_processor(BatchSpanProcessor(exporter))
+trace.set_tracer_provider(provider)
+
+tracer = trace.get_tracer("order-service")
+
+def process_order(order_id: str) -> None:
+    with tracer.start_as_current_span("process_order") as span:
+        span.set_attribute("order.id", order_id)
+        try:
+            validate(order_id)
+            charge(order_id)
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(trace.StatusCode.ERROR, str(e))
+            raise
+```
+
+**Context propagation across HTTP calls**
+
+```go
+// Inject trace context into outgoing request
+import "go.opentelemetry.io/otel/propagation"
+
+otel.SetTextMapPropagator(propagation.TraceContext{})
+
+req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+// Adds: traceparent: 00-<traceId>-<spanId>-01
+
+// Extract from incoming request (server side)
+ctx = otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+```
+
+**Environment variable configuration**
+
+```bash
+# All SDK settings can be configured via env vars
+OTEL_SERVICE_NAME=order-service
+OTEL_SERVICE_VERSION=1.2.3
+OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc           # grpc | http/protobuf | http/json
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1                # 10% sampling
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production,k8s.namespace.name=default
+```
+</Level>
+
+<Level show="long">
+**Sampling strategies**
+
+Sampling controls what percentage of traces are collected and stored.
+
+| Strategy | How it works | Best for |
+|----------|-------------|---------|
+| `always_on` | Record everything | Development, low-traffic |
+| `always_off` | Record nothing | Testing/disabled |
+| `traceidratio` | % of new traces (head sampling) | High-throughput baseline |
+| `parentbased_traceidratio` | Respect parent's decision | Distributed systems |
+| Tail sampling (Collector) | Decision after span complete | Sampling on error/latency |
+
+**Head sampling** (at SDK level) decides before the trace is complete — fast but can't sample on outcome (error, slow span).
+
+**Tail sampling** (at Collector level) buffers spans and decides after seeing the whole trace:
+
+```yaml
+processors:
+  tail_sampling:
+    decision_wait: 10s     # wait up to 10s for all spans
+    num_traces: 100        # hold up to 100k trace IDs in memory
+    expected_new_traces_per_sec: 10
+    policies:
+      - name: errors-policy
+        type: status_code
+        status_code: { status_codes: [ERROR] }   # always sample errors
+      - name: slow-policy
+        type: latency
+        latency: { threshold_ms: 1000 }          # always sample > 1s
+      - name: random-10pct
+        type: probabilistic
+        probabilistic: { sampling_percentage: 10 }
+```
+
+**Baggage — cross-cutting context**
+
+Baggage propagates key-value pairs alongside trace context — useful for passing user ID, tenant, or feature flags across service boundaries:
+
+```go
+import "go.opentelemetry.io/otel/baggage"
+
+// Set baggage
+b, _ := baggage.Parse("userId=alice,tenantId=acme")
+ctx = baggage.ContextWithBaggage(ctx, b)
+
+// Read baggage downstream
+bag := baggage.FromContext(ctx)
+userID := bag.Member("userId").Value()
+```
+
+**Metrics with OTel — Go**
+
+```go
+meter := otel.Meter("order-service")
+
+orderCounter, _ := meter.Int64Counter("orders.created",
+    metric.WithDescription("Number of orders created"),
+    metric.WithUnit("{order}"),
+)
+
+orderDuration, _ := meter.Float64Histogram("orders.duration",
+    metric.WithDescription("Order processing duration"),
+    metric.WithUnit("s"),
+)
+
+func processOrder(ctx context.Context, orderID string) error {
+    start := time.Now()
+    defer func() {
+        orderDuration.Record(ctx, time.Since(start).Seconds(),
+            metric.WithAttributes(attribute.String("order.type", "standard")),
+        )
+    }()
+
+    err := doProcess(ctx, orderID)
+    if err == nil {
+        orderCounter.Add(ctx, 1)
+    }
+    return err
+}
+```
+
+**Structured logging with trace correlation**
+
+```go
+// Attach trace/span IDs to log entries so logs link to traces
+span := trace.SpanFromContext(ctx)
+slog.InfoContext(ctx, "order processed",
+    "trace_id", span.SpanContext().TraceID().String(),
+    "span_id",  span.SpanContext().SpanID().String(),
+    "order_id", orderID,
+)
+```
+
+**OTel Operator for Kubernetes**
+
+```yaml
+# Install the operator, then annotate your pod:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    instrumentation.opentelemetry.io/inject-python: "true"
+    # or: inject-java, inject-nodejs, inject-dotnet, inject-go
+```
+
+The operator injects the OTel SDK and configures it automatically — zero code changes required for supported runtimes.
+</Level>

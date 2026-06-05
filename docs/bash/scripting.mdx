@@ -1,0 +1,290 @@
+---
+title: Bash Scripting
+sidebar_label: Scripting
+sidebar_position: 1
+tutorials:
+  - label: "Bash manual"
+    url: https://www.gnu.org/software/bash/manual/bash.html
+  - label: "Bash scripting guide"
+    url: https://tldp.org/LDP/abs/html/
+  - label: "ShellCheck"
+    url: https://www.shellcheck.net/
+---
+
+# Bash Scripting
+
+<Level show="short">
+```bash
+#!/usr/bin/env bash
+set -euo pipefail   # exit on error, unset vars, pipe failures
+
+NAME="${1:-world}"  # first arg, default "world"
+echo "Hello, $NAME!"
+
+for file in *.txt; do
+    echo "Processing $file"
+done
+```
+
+Always use `#!/usr/bin/env bash` and `set -euo pipefail` at the top of scripts.
+</Level>
+
+<Level show="medium">
+**Variables and quoting**
+
+```bash
+# Assignment — no spaces around =
+greeting="Hello"
+count=42
+readonly MAX=100   # immutable
+
+# Always quote variables to handle spaces/special chars
+echo "$greeting"
+echo "${greeting}!"   # braces needed when concatenating
+
+# Command substitution
+today=$(date +%Y-%m-%d)
+files=$(ls *.txt 2>/dev/null)
+
+# Arithmetic
+result=$((count * 2 + 1))
+((count++))
+
+# String operations
+name="hello_world"
+echo "${name^^}"          # HELLO_WORLD (uppercase)
+echo "${name%_*}"         # hello (remove shortest suffix match)
+echo "${name#*_}"         # world (remove shortest prefix match)
+echo "${#name}"           # 11 (length)
+echo "${name/hello/hi}"   # hi_world (replace)
+```
+
+**Conditionals**
+
+```bash
+# [[ ]] is preferred over [ ] — more features, fewer pitfalls
+if [[ "$name" == "alice" ]]; then
+    echo "Found alice"
+elif [[ "$name" =~ ^[A-Z] ]]; then
+    echo "Name starts with uppercase"
+else
+    echo "Other"
+fi
+
+# File tests
+if [[ -f "$file" ]]; then echo "is file"; fi
+if [[ -d "$dir" ]];  then echo "is dir"; fi
+if [[ -z "$var" ]];  then echo "empty string"; fi
+if [[ -n "$var" ]];  then echo "non-empty"; fi
+
+# Combine
+if [[ -f "$file" && -r "$file" ]]; then
+    cat "$file"
+fi
+
+# Case
+case "$action" in
+    start)   systemctl start app ;;
+    stop)    systemctl stop app ;;
+    restart) systemctl restart app ;;
+    *)       echo "Unknown: $action" >&2; exit 1 ;;
+esac
+```
+
+**Loops**
+
+```bash
+# for — list
+for name in alice bob carol; do
+    echo "Hello, $name"
+done
+
+# for — glob
+for f in /var/log/*.log; do
+    wc -l "$f"
+done
+
+# for — C-style
+for ((i=0; i<10; i++)); do
+    echo "$i"
+done
+
+# while — read lines
+while IFS= read -r line; do
+    echo "Line: $line"
+done < input.txt
+
+# while — until condition
+count=0
+while [[ $count -lt 5 ]]; do
+    echo "$count"
+    ((count++))
+done
+```
+
+**Functions**
+
+```bash
+# Declare before first use
+greet() {
+    local name="${1:?'name is required'}"   # : ? exits if missing
+    local greeting="${2:-Hello}"
+    echo "$greeting, $name!"
+}
+
+greet "Alice"            # Hello, Alice!
+greet "Bob" "Hi"         # Hi, Bob!
+
+# Return values via stdout — capture with $()
+get_timestamp() {
+    date +%Y%m%d_%H%M%S
+}
+ts=$(get_timestamp)
+
+# Return status codes (0=success, non-zero=failure)
+file_exists() {
+    [[ -f "$1" ]]   # returns 0 if true, 1 if false
+}
+
+if file_exists "/etc/hosts"; then
+    echo "Found"
+fi
+```
+
+**Special variables**
+
+```bash
+$0    # script name
+$1-$9 # positional arguments
+$@    # all arguments (as separate words) — use this in most cases
+$*    # all arguments (as single word)
+$#    # number of arguments
+$?    # exit status of last command
+$$    # current process ID
+$!    # PID of last background process
+```
+</Level>
+
+<Level show="long">
+**Quoting rules and word splitting**
+
+Bash performs several transformations on unquoted text: brace expansion → tilde expansion → parameter expansion → command substitution → arithmetic expansion → **word splitting** → pathname expansion (globbing).
+
+Word splitting happens on unquoted `$var` using characters in `$IFS` (default: space, tab, newline). This breaks filenames with spaces:
+
+```bash
+file="my document.txt"
+cat $file    # runs: cat my document.txt — two args!
+cat "$file"  # runs: cat "my document.txt" — correct
+```
+
+```bash
+# IFS manipulation for custom splitting
+IFS=: read -ra parts <<< "/usr/local/bin:/usr/bin:/bin"
+for p in "${parts[@]}"; do echo "$p"; done
+```
+
+**`[[ ]]` vs `[ ]`**
+
+```bash
+# [ ] is POSIX sh; [[ ]] is bash-only but safer
+[ $a = $b ]    # word-splits $a and $b — dangerous
+[[ $a = $b ]]  # no word splitting inside [[ ]]
+
+# [[ ]] supports regex matching
+[[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]
+
+# [[ ]] supports pattern matching (not regex)
+[[ "$name" == "alice"* ]]   # prefix match
+```
+
+**Arrays**
+
+```bash
+# Indexed array
+fruits=("apple" "banana" "cherry")
+fruits+=("date")              # append
+echo "${fruits[0]}"           # apple
+echo "${fruits[@]}"           # all elements
+echo "${#fruits[@]}"          # length: 4
+echo "${fruits[@]:1:2}"       # slice: banana cherry
+unset "fruits[1]"             # remove element
+
+# Iterate safely (handles spaces in elements)
+for fruit in "${fruits[@]}"; do
+    echo "$fruit"
+done
+
+# Associative array (bash 4+)
+declare -A ages
+ages["alice"]=30
+ages["bob"]=25
+echo "${ages["alice"]}"       # 30
+for key in "${!ages[@]}"; do  # iterate keys
+    echo "$key: ${ages[$key]}"
+done
+```
+
+**Subshells vs current shell**
+
+```bash
+# Subshell — parentheses; changes don't affect parent
+(cd /tmp && ls)   # cwd unchanged after
+
+# Current shell — braces; changes DO affect parent
+{ cd /tmp; ls; }  # cwd IS /tmp after (note: space + semicolon required)
+
+# Pipes run in subshells — variable changes are lost
+count=0
+cat file.txt | while read -r line; do
+    ((count++))
+done
+echo "$count"   # 0! — the while ran in a subshell
+
+# Fix: use process substitution or readarray
+readarray -t lines < file.txt
+count=${#lines[@]}
+```
+
+**`set` options for robust scripts**
+
+```bash
+set -e          # exit on any error (errexit)
+set -u          # treat unset variables as errors (nounset)
+set -o pipefail # pipe fails if any command fails (not just last)
+set -x          # print each command before running (debug mode)
+
+# Combined (standard safe script header)
+set -euo pipefail
+```
+
+**Traps — cleanup on exit**
+
+```bash
+TMPDIR=$(mktemp -d)
+
+cleanup() {
+    rm -rf "$TMPDIR"
+    echo "Cleaned up" >&2
+}
+trap cleanup EXIT          # runs on any exit
+trap 'cleanup; exit 1' INT TERM   # also handle Ctrl+C
+
+# Temp file pattern
+tmpfile=$(mktemp)
+trap 'rm -f "$tmpfile"' EXIT
+```
+
+**`nameref` — indirect variable references (bash 4.3+)**
+
+```bash
+set_config() {
+    local -n ref=$1   # nameref to variable named by $1
+    ref="configured"
+}
+
+my_var="initial"
+set_config my_var
+echo "$my_var"   # configured
+```
+</Level>

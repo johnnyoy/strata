@@ -1,0 +1,215 @@
+---
+title: OpenTelemetry Concepts
+sidebar_label: Concepts
+sidebar_position: 1
+tutorials:
+  - label: "OpenTelemetry documentation"
+    url: https://opentelemetry.io/docs/
+  - label: "CNCF OpenTelemetry"
+    url: https://www.cncf.io/projects/opentelemetry/
+  - label: "OpenTelemetry Collector"
+    url: https://opentelemetry.io/docs/collector/
+---
+
+# OpenTelemetry Concepts
+
+<Level show="short">
+OpenTelemetry (OTel) is the CNCF standard for collecting **traces**, **metrics**, and **logs** from your applications — vendor-neutral and language-agnostic.
+
+- **Trace** — the end-to-end journey of a request through your system
+- **Span** — one unit of work within a trace (e.g., a DB query, an HTTP call)
+- **Metric** — a numeric measurement over time (latency, error rate, CPU)
+- **Log** — a timestamped event with structured context
+
+Everything flows through the **Collector**: app → OTLP → Collector → backend (Jaeger, Grafana Tempo, Datadog, etc.)
+</Level>
+
+<Level show="medium">
+**The three signals**
+
+| Signal | What it captures | Common backends |
+|--------|-----------------|-----------------|
+| Traces | Request flows across services | Jaeger, Grafana Tempo, Zipkin |
+| Metrics | Numeric aggregates over time | Prometheus, Grafana Mimir |
+| Logs | Timestamped structured events | Elasticsearch, Loki, Splunk |
+
+OpenTelemetry provides a unified API + SDK for all three, plus the Collector to route them.
+
+**Traces and spans**
+
+A trace is a directed acyclic graph of spans. Each span has:
+- A **trace ID** (shared across all spans in a request)
+- A **span ID** (unique to this operation)
+- A **parent span ID** (links to the calling span)
+- **Attributes** — key-value pairs describing the operation
+- **Events** — timestamped annotations within the span
+- **Status** — OK, ERROR, or UNSET
+- Start/end timestamps
+
+```
+Trace: abc123
+  └─ [span] HTTP GET /orders         0ms – 45ms
+       ├─ [span] auth.validate        2ms – 5ms
+       ├─ [span] db.query orders      6ms – 30ms
+       │    └─ [span] db.connect      6ms – 8ms
+       └─ [span] cache.get           31ms – 33ms
+```
+
+**The Collector**
+
+The OpenTelemetry Collector is a proxy/pipeline for telemetry data:
+
+```
+App (SDK) ──OTLP──▶ Collector ──▶ Jaeger (traces)
+                                ──▶ Prometheus (metrics)
+                                ──▶ Loki (logs)
+```
+
+Collector components:
+
+| Component | Role | Examples |
+|-----------|------|---------|
+| Receiver | Accepts data from apps | `otlp`, `prometheus`, `filelog` |
+| Processor | Transform/filter/batch data | `batch`, `memory_limiter`, `attributes` |
+| Exporter | Send data to backends | `otlp`, `prometheusremotewrite`, `loki` |
+
+Minimal Collector config:
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+
+exporters:
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger]
+```
+
+**Context propagation**
+
+For traces to link across services, each HTTP/gRPC call must carry the trace context in headers. The W3C `traceparent` header is the standard:
+
+```
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+              ^  ^                                ^                ^
+             ver  trace-id (128-bit hex)          span-id (64-bit)  flags
+```
+
+Auto-instrumentation propagates this automatically. Manual instrumentation requires injecting/extracting the context.
+</Level>
+
+<Level show="long">
+**OTLP — the wire protocol**
+
+OpenTelemetry Protocol (OTLP) is the transport format for all three signals. It uses Protocol Buffers over:
+- **gRPC** (default): port 4317, efficient binary framing, bidirectional streaming
+- **HTTP/protobuf**: port 4318 `/v1/traces`, `/v1/metrics`, `/v1/logs`
+- **HTTP/JSON**: same ports, easier debugging with `curl`
+
+```bash
+# Test OTLP HTTP endpoint with curl (JSON format)
+curl -X POST http://localhost:4318/v1/traces \
+  -H "Content-Type: application/json" \
+  -d '{"resourceSpans":[]}'
+```
+
+**W3C TraceContext vs B3 propagation**
+
+| Format | Header | Used by |
+|--------|--------|---------|
+| W3C TraceContext | `traceparent`, `tracestate` | Default in OTel SDK |
+| B3 Single | `b3` | Zipkin, older Jaeger |
+| B3 Multi | `X-B3-TraceId`, `X-B3-SpanId`, `X-B3-Sampled` | Zipkin, Spring Cloud Sleuth |
+
+OTel SDKs support all three via propagator configuration.
+
+**Semantic conventions**
+
+OTel defines standard attribute names for common operations to ensure consistent querying across backends:
+
+```
+http.request.method = "GET"
+http.response.status_code = 200
+url.full = "https://api.example.com/users"
+server.address = "api.example.com"
+db.system = "postgresql"
+db.statement = "SELECT * FROM users WHERE id = $1"
+messaging.system = "kafka"
+messaging.destination.name = "orders"
+```
+
+**Resource attributes — describing the service itself**
+
+```yaml
+# Set at SDK initialization time
+resource:
+  attributes:
+    service.name: "order-service"
+    service.version: "1.2.3"
+    deployment.environment: "production"
+    k8s.pod.name: "${POD_NAME}"
+    k8s.namespace.name: "${NAMESPACE}"
+```
+
+**Collector deployment patterns**
+
+| Pattern | Description | Best for |
+|---------|-------------|---------|
+| Sidecar | Collector per pod | K8s; isolation between services |
+| DaemonSet | One Collector per node | K8s; shared node-level collection |
+| Gateway | Centralized Collector cluster | Preprocessing, auth, fan-out |
+
+Typical K8s setup: sidecar or SDK → DaemonSet → Gateway → backends.
+
+**Processor patterns**
+
+```yaml
+processors:
+  # Always include — prevents OOM if backend is slow
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+  # Batch for efficiency
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+  # Enrich spans with K8s metadata
+  k8sattributes:
+    extract:
+      metadata: [k8s.pod.name, k8s.namespace.name, k8s.deployment.name]
+
+  # Drop high-cardinality attributes before export
+  attributes/redact:
+    actions:
+      - key: db.statement
+        action: delete
+```
+
+**Relationship with Prometheus**
+
+OTel and Prometheus coexist:
+- Prometheus scrapes `/metrics` endpoints (pull-based)
+- OTel pushes metrics via OTLP (push-based)
+- The Collector can scrape Prometheus endpoints (`prometheus` receiver) and forward via OTLP, or expose a `prometheusremotewrite` exporter
+
+OTel is not a replacement for Prometheus — it's a complementary standard that handles traces and logs which Prometheus doesn't.
+</Level>

@@ -1,0 +1,318 @@
+---
+title: Go Concurrency
+sidebar_label: Concurrency
+sidebar_position: 2
+tutorials:
+  - label: "Effective Go — Concurrency"
+    url: https://go.dev/doc/effective_go#concurrency
+  - label: "Go concurrency patterns"
+    url: https://go.dev/blog/pipelines
+  - label: "Go memory model"
+    url: https://go.dev/ref/mem
+---
+
+# Go Concurrency
+
+<Level show="short">
+Goroutines are lightweight threads. Channels pass data between them.
+
+```go
+// Launch a goroutine
+go func() {
+    fmt.Println("running concurrently")
+}()
+
+// Channel — send and receive
+ch := make(chan string)
+go func() { ch <- "hello" }()
+msg := <-ch
+fmt.Println(msg)
+
+// Wait for multiple goroutines
+var wg sync.WaitGroup
+wg.Add(2)
+go func() { defer wg.Done(); work1() }()
+go func() { defer wg.Done(); work2() }()
+wg.Wait()
+```
+</Level>
+
+<Level show="medium">
+**Goroutines**
+
+```go
+// go statement launches a goroutine — non-blocking
+go expensiveWork()
+
+// Pass data via closure — capture by reference, be careful with loops
+for _, url := range urls {
+    url := url   // shadow the loop var — creates a new binding per iteration
+    go func() {
+        fetch(url)
+    }()
+}
+```
+
+**Channels**
+
+```go
+// Unbuffered — sender blocks until receiver is ready
+ch := make(chan int)
+
+// Buffered — sender blocks only when buffer is full
+ch := make(chan int, 10)
+
+// Send and receive
+ch <- 42      // send
+val := <-ch   // receive (blocks until value available)
+
+// Close signals that no more values will be sent
+close(ch)
+
+// Range over channel until closed
+for val := range ch {
+    fmt.Println(val)
+}
+
+// Check if closed
+val, ok := <-ch
+if !ok {
+    fmt.Println("channel closed")
+}
+```
+
+**Select — wait on multiple channels**
+
+```go
+select {
+case msg := <-messages:
+    fmt.Println("received:", msg)
+case <-timeout:
+    fmt.Println("timed out")
+case <-ctx.Done():
+    fmt.Println("cancelled:", ctx.Err())
+}
+
+// Non-blocking receive
+select {
+case val := <-ch:
+    process(val)
+default:
+    // ch is empty — continue without blocking
+}
+```
+
+**`sync.WaitGroup`**
+
+```go
+var wg sync.WaitGroup
+
+for _, item := range items {
+    wg.Add(1)
+    go func(item Item) {
+        defer wg.Done()
+        process(item)
+    }(item)
+}
+wg.Wait()   // block until all goroutines call Done()
+```
+
+**`sync.Mutex` — protect shared state**
+
+```go
+type SafeCounter struct {
+    mu sync.Mutex
+    count int
+}
+
+func (c *SafeCounter) Inc() {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.count++
+}
+
+func (c *SafeCounter) Value() int {
+    c.mu.RLock()   // RWMutex allows concurrent reads
+    defer c.mu.RUnlock()
+    return c.count
+}
+```
+
+**Context — cancellation and deadlines**
+
+```go
+// Create a context with cancel
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()   // always cancel to free resources
+
+// With timeout
+ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+defer cancel()
+
+// Pass context through — first param by convention
+func fetchData(ctx context.Context, url string) ([]byte, error) {
+    req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    return io.ReadAll(resp.Body)
+}
+
+// Cancel propagates to all goroutines watching the context
+go func() {
+    select {
+    case <-ctx.Done():
+        fmt.Println("cancelled:", ctx.Err())
+        return
+    case result := <-workCh:
+        process(result)
+    }
+}()
+```
+</Level>
+
+<Level show="long">
+**Goroutine scheduler internals (M:N model)**
+
+Go uses an M:N scheduler: M goroutines run on N OS threads. Key components:
+
+- **G** (goroutine) — lightweight, starts at ~2KB stack that grows dynamically
+- **M** (machine) — OS thread
+- **P** (processor) — scheduler context; `GOMAXPROCS` controls how many run in parallel (default: number of CPU cores)
+
+Each P has a local run queue of goroutines. A goroutine blocks on:
+1. Channel operations (parked, not sleeping the OS thread)
+2. System calls (M detaches from P so P can run other goroutines)
+3. `runtime.Gosched()` (voluntary yield)
+
+**Channel direction types**
+
+```go
+// Restrict channel usage in function signatures
+func produce(out chan<- int) {   // send-only
+    out <- 42
+}
+
+func consume(in <-chan int) {    // receive-only
+    val := <-in
+    fmt.Println(val)
+}
+
+ch := make(chan int)
+go produce(ch)
+consume(ch)
+```
+
+**Fan-out / fan-in pattern**
+
+```go
+func fanOut(ctx context.Context, in <-chan Work, workers int) []<-chan Result {
+    channels := make([]<-chan Result, workers)
+    for i := range workers {
+        ch := make(chan Result)
+        channels[i] = ch
+        go func() {
+            defer close(ch)
+            for w := range in {
+                select {
+                case ch <- process(w):
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }()
+    }
+    return channels
+}
+
+func merge(ctx context.Context, channels ...<-chan Result) <-chan Result {
+    out := make(chan Result)
+    var wg sync.WaitGroup
+    for _, ch := range channels {
+        wg.Add(1)
+        go func(c <-chan Result) {
+            defer wg.Done()
+            for r := range c {
+                select {
+                case out <- r:
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }(ch)
+    }
+    go func() { wg.Wait(); close(out) }()
+    return out
+}
+```
+
+**Worker pool pattern**
+
+```go
+func workerPool(ctx context.Context, jobs <-chan Job, numWorkers int) <-chan Result {
+    results := make(chan Result, numWorkers)
+    var wg sync.WaitGroup
+    for range numWorkers {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for job := range jobs {
+                select {
+                case results <- process(job):
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }()
+    }
+    go func() { wg.Wait(); close(results) }()
+    return results
+}
+```
+
+**`sync.Once` — run initialization exactly once**
+
+```go
+var (
+    instance *DB
+    once     sync.Once
+)
+
+func GetDB() *DB {
+    once.Do(func() {
+        instance = connect()
+    })
+    return instance
+}
+```
+
+**Race detector**
+
+```bash
+go test -race ./...   # detect data races in tests
+go run -race main.go  # detect races in running program
+```
+
+The race detector instruments memory accesses and reports concurrent unsynchronized reads and writes. Always run in CI.
+
+**`errgroup` — goroutines with error propagation**
+
+```go
+import "golang.org/x/sync/errgroup"
+
+g, ctx := errgroup.WithContext(context.Background())
+
+for _, url := range urls {
+    url := url
+    g.Go(func() error {
+        return fetch(ctx, url)
+    })
+}
+
+if err := g.Wait(); err != nil {
+    log.Fatal(err)   // first error from any goroutine
+}
+```
+</Level>

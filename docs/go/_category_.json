@@ -1,0 +1,9 @@
+{
+  "label": "Go",
+  "position": 15,
+  "link": {
+    "type": "generated-index",
+    "slug": "/go",
+    "description": "Go programming language — concurrency, interfaces, and the toolchain powering Kubernetes, Docker, and Terraform."
+  }
+}

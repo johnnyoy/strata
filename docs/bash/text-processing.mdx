@@ -1,0 +1,234 @@
+---
+title: Text Processing
+sidebar_label: Text Processing
+sidebar_position: 2
+tutorials:
+  - label: "sed manual"
+    url: https://www.gnu.org/software/sed/manual/sed.html
+  - label: "awk manual"
+    url: https://www.gnu.org/software/gawk/manual/gawk.html
+  - label: "Command-line text processing"
+    url: https://learnbyexample.github.io/cli_text_processing_coreutils/
+---
+
+# Text Processing
+
+<Level show="short">
+```bash
+# sed — stream editor (substitute, delete, print)
+sed 's/old/new/g' file.txt          # replace all occurrences
+sed -i 's/foo/bar/g' file.txt       # edit file in-place
+sed -n '5,10p' file.txt             # print lines 5-10
+
+# awk — field processing
+awk '{print $1, $3}' file.txt       # print columns 1 and 3
+awk -F: '{print $1}' /etc/passwd    # : as field separator
+awk '$3 > 100' file.txt             # print lines where col 3 > 100
+
+# cut — extract columns
+cut -d: -f1,3 /etc/passwd           # fields 1 and 3, colon-delimited
+```
+</Level>
+
+<Level show="medium">
+**`sed` — stream editor**
+
+```bash
+# Substitution: s/pattern/replacement/flags
+sed 's/error/ERROR/'      # replace first occurrence per line
+sed 's/error/ERROR/g'     # replace all (g = global)
+sed 's/error/ERROR/gi'    # case-insensitive (GNU sed)
+sed 's|/usr/local|/opt|g' # use | as delimiter (avoids escaping /)
+
+# Address ranges
+sed '3s/old/new/'         # only line 3
+sed '3,7s/old/new/g'      # lines 3 to 7
+sed '/START/,/END/s/x/y/g' # between pattern markers
+sed '/^#/d'               # delete comment lines
+sed '/^$/d'               # delete blank lines
+
+# Multiple commands
+sed -e 's/foo/bar/g' -e 's/baz/qux/g' file.txt
+sed '/pattern/{s/x/y/; s/a/b/}' file.txt
+
+# Print specific lines
+sed -n '10,20p' file.txt            # print lines 10-20
+sed -n '/START/,/END/p' file.txt    # print between markers
+```
+
+**`awk` — pattern/action language**
+
+```bash
+# Structure: awk 'pattern { action }' file
+awk '{ print NR, $0 }' file.txt         # print line number + line
+awk 'NR==5'             file.txt         # print line 5
+awk 'NF > 0'            file.txt         # non-empty lines
+awk '$2 ~ /^[0-9]+$/'  file.txt         # col 2 matches regex
+
+# Built-in variables
+# NR  — current record (line) number
+# NF  — number of fields in current record
+# FS  — field separator (default: whitespace)
+# OFS — output field separator
+# $0  — entire line; $1, $2, … — fields
+
+# Custom separator
+awk -F',' '{ print $2 }' data.csv
+awk 'BEGIN{FS=","} { print $2 }' data.csv
+
+# Aggregation
+awk '{ sum += $3 } END { print "Total:", sum }' sales.txt
+awk '{ count[$1]++ } END { for (k in count) print k, count[k] }' log.txt
+
+# Modify output
+awk 'BEGIN{OFS="\t"} { print $1, $3, $5 }' file.txt
+awk '{ $2 = toupper($2); print }' file.txt
+
+# Conditionals
+awk '{ if ($3 > 100) print $1, "HIGH"; else print $1, "LOW" }' file.txt
+```
+
+**`cut`, `sort`, `uniq`, `tr`**
+
+```bash
+# cut — extract fields or character positions
+cut -d',' -f1,3     data.csv     # fields 1 and 3 (CSV)
+cut -c1-10          file.txt     # characters 1–10
+
+# sort
+sort file.txt                    # alphabetical
+sort -n file.txt                 # numeric
+sort -rn file.txt                # reverse numeric
+sort -t: -k3 -n /etc/passwd      # sort by 3rd field (: separator)
+sort -u file.txt                 # unique (deduplicate while sorting)
+
+# uniq — collapse adjacent duplicates (sort first!)
+sort file.txt | uniq             # deduplicate
+sort file.txt | uniq -c          # count occurrences
+sort file.txt | uniq -d          # only duplicates
+sort file.txt | uniq -u          # only unique lines
+
+# tr — character translation
+tr 'a-z' 'A-Z'                  # uppercase
+tr -d '\r'                       # delete carriage returns (Windows → Unix)
+tr -s ' '                        # squeeze repeated spaces to one
+```
+
+**Pipes and process substitution**
+
+```bash
+# Pipe — stdout of left → stdin of right
+cat access.log | grep "ERROR" | awk '{print $7}' | sort | uniq -c | sort -rn
+
+# Process substitution — treat command output as a file
+diff <(sort file1.txt) <(sort file2.txt)
+comm -23 <(sort list1.txt) <(sort list2.txt)   # lines only in list1
+
+# Tee — write to file and stdout simultaneously
+command | tee output.txt | grep pattern
+```
+</Level>
+
+<Level show="long">
+**`sed` internals — pattern space and hold space**
+
+`sed` maintains two buffers:
+- **Pattern space** — current line being processed (starts fresh each line)
+- **Hold space** — persistent buffer across lines (starts empty)
+
+```bash
+# h/H — copy/append pattern space to hold space
+# g/G — copy/append hold space to pattern space
+# x   — exchange pattern and hold space
+
+# Reverse file (tac equivalent)
+sed -n '1!G; h; $p' file.txt
+# Explanation:
+#   1!G  — if not line 1, append hold space to pattern space
+#   h    — copy pattern space to hold space
+#   $p   — on last line, print pattern space
+
+# Join continuation lines (lines ending with \)
+sed -e :a -e '/\\$/N; s/\\\n//; ta' file.txt
+```
+
+**`awk` programming**
+
+```bash
+# Multi-file processing
+awk 'FNR==1 { print "=== File:", FILENAME }
+     { print }' file1.txt file2.txt
+
+# Arrays
+awk '{
+    for (i=1; i<=NF; i++) {
+        words[$i]++
+    }
+}
+END {
+    for (w in words) {
+        print words[w], w
+    }
+}' document.txt | sort -rn | head -20
+
+# String functions
+awk '{
+    print length($0),          # string length
+          substr($1, 1, 3),    # substring (1-indexed)
+          index($0, "pattern"), # position of pattern (0 if not found)
+          split($3, arr, ":"),  # split field 3 on : into arr
+          gsub(/foo/, "bar")    # replace in place, returns count
+}' file.txt
+
+# printf formatting
+awk '{ printf "%-20s %8.2f\n", $1, $2 }' data.txt
+```
+
+**`grep` with context and PCRE**
+
+```bash
+# Context lines
+grep -A 3 "ERROR" log.txt      # 3 lines after match
+grep -B 2 "ERROR" log.txt      # 2 lines before match
+grep -C 2 "ERROR" log.txt      # 2 lines before and after
+
+# Extended regex (-E) vs Perl-compatible (-P)
+grep -E '(foo|bar)' file.txt   # alternation with ERE
+grep -P '\d{3}-\d{4}' file.txt # Perl regex (lookahead, etc.)
+
+# Count and list
+grep -c "ERROR" log.txt        # count matching lines
+grep -l "ERROR" *.log          # list files with match
+grep -L "ERROR" *.log          # list files WITHOUT match
+grep -n "ERROR" log.txt        # show line numbers
+
+# Invert match
+grep -v "^#" config.txt        # exclude comment lines
+```
+
+**`xargs` — build commands from stdin**
+
+```bash
+# Process many files that would overflow argument limits
+find . -name "*.log" | xargs grep "ERROR"
+
+# Parallel execution
+find . -name "*.gz" | xargs -P 4 -I{} gunzip {}
+
+# Null-delimited (handles filenames with spaces)
+find . -name "*.txt" -print0 | xargs -0 wc -l
+```
+
+**`jq` — JSON processing**
+
+```bash
+# Select field
+curl -s api.example.com/users | jq '.[] | .name'
+
+# Filter and transform
+jq '[.[] | select(.active == true) | {id, name}]' users.json
+
+# Aggregate
+jq '[.[] | .score] | add / length' scores.json   # average
+```
+</Level>

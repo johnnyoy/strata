@@ -1,0 +1,128 @@
+---
+title: Bash Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# Bash Cheat Sheet
+
+<CheatSection title="Variables & Quoting">
+
+| Pattern | Code |
+|---------|------|
+| Assign | `name="hello"` (no spaces around =) |
+| Reference | `"$name"` (always quote) |
+| Default value | `"${name:-default}"` |
+| Assign if unset | `"${name:=default}"` |
+| Error if unset | `"${name:?error message}"` |
+| String length | `"${#name}"` |
+| Substring | `"${name:2:5}"` (offset:length) |
+| Remove prefix | `"${name#prefix*}"` (shortest) · `"${name##prefix*}"` (longest) |
+| Remove suffix | `"${name%*suffix}"` (shortest) · `"${name%%*suffix}"` (longest) |
+| Replace first | `"${name/old/new}"` |
+| Replace all | `"${name//old/new}"` |
+| Uppercase | `"${name^^}"` |
+| Lowercase | `"${name,,}"` |
+
+</CheatSection>
+
+<CheatSection title="Conditionals">
+
+| Test | Meaning |
+|------|---------|
+| `[[ -f "$f" ]]` | Is regular file |
+| `[[ -d "$d" ]]` | Is directory |
+| `[[ -e "$p" ]]` | Exists |
+| `[[ -r "$f" ]]` | Readable |
+| `[[ -x "$f" ]]` | Executable |
+| `[[ -z "$s" ]]` | Empty string |
+| `[[ -n "$s" ]]` | Non-empty string |
+| `[[ "$a" == "$b" ]]` | String equality |
+| `[[ "$a" != "$b" ]]` | String inequality |
+| `[[ "$s" =~ regex ]]` | Regex match |
+| `[[ $n -eq 0 ]]` | Numeric equal |
+| `[[ $n -gt 0 ]]` | Numeric greater-than |
+| `[[ $n -lt 10 ]]` | Numeric less-than |
+
+</CheatSection>
+
+<CheatSection title="Loops">
+
+| Pattern | Code |
+|---------|------|
+| List | `for item in a b c; do ...; done` |
+| Glob | `for f in *.txt; do ...; done` |
+| Array | `for item in "${arr[@]}"; do ...; done` |
+| C-style | `for ((i=0; i<10; i++)); do ...; done` |
+| While | `while [[ condition ]]; do ...; done` |
+| Read lines | `while IFS= read -r line; do ...; done < file.txt` |
+| Break/continue | `break` / `continue` |
+
+</CheatSection>
+
+<CheatSection title="Functions">
+
+| Pattern | Code |
+|---------|------|
+| Define | `myfunc() { local x="$1"; echo "$x"; }` |
+| Required arg | `local x="${1:?'arg required'}"` |
+| Default arg | `local x="${1:-default}"` |
+| Return status | `return 0` (success) · `return 1` (failure) |
+| Return value | `echo "result"` then capture: `result=$(myfunc)` |
+| Special vars | `$1`…`$9` args · `$#` count · `$@` all args · `$?` last exit |
+
+</CheatSection>
+
+<CheatSection title="Text Tools">
+
+| Tool | Common patterns |
+|------|----------------|
+| `sed 's/old/new/g'` | Replace all occurrences |
+| `sed -i 's/old/new/g' file` | Edit file in-place |
+| `sed -n '5,10p'` | Print lines 5–10 |
+| `sed '/^#/d'` | Delete comment lines |
+| `awk '{print $2}'` | Print 2nd field |
+| `awk -F: '{print $1}'` | Custom delimiter |
+| `awk '{sum+=$3} END{print sum}'` | Sum column 3 |
+| `awk '{count[$1]++} END{for(k in count) print k,count[k]}'` | Frequency count |
+| `cut -d, -f1,3` | Fields 1 and 3 (CSV) |
+| `sort -t: -k3 -n` | Sort by 3rd colon-delimited field numerically |
+| `sort \| uniq -c \| sort -rn` | Count + rank duplicates |
+| `tr 'a-z' 'A-Z'` | Uppercase |
+| `tr -d '\r'` | Remove Windows line endings |
+
+</CheatSection>
+
+<CheatSection title="Redirections">
+
+| Syntax | Meaning |
+|--------|---------|
+| `cmd > file` | Redirect stdout to file (overwrite) |
+| `cmd >> file` | Redirect stdout to file (append) |
+| `cmd 2> file` | Redirect stderr to file |
+| `cmd 2>&1` | Redirect stderr to stdout |
+| `cmd &> file` | Redirect both stdout and stderr to file |
+| `cmd > /dev/null 2>&1` | Discard all output |
+| `cmd < file` | Redirect file to stdin |
+| `cmd1 \| cmd2` | Pipe stdout of cmd1 to stdin of cmd2 |
+| `cmd > >(tee file)` | Tee stdout to file and forward |
+| `diff <(cmd1) <(cmd2)` | Process substitution |
+
+</CheatSection>
+
+<CheatSection title="Safety & Automation">
+
+| Pattern | Code |
+|---------|------|
+| Safe header | `set -euo pipefail` |
+| Log to stderr | `echo "msg" >&2` |
+| Cleanup on exit | `trap 'rm -f "$tmpfile"' EXIT` |
+| Handle interrupt | `trap 'echo "interrupted"; exit 1' INT TERM` |
+| Temp file | `tmpfile=$(mktemp)` |
+| Temp dir | `tmpdir=$(mktemp -d)` |
+| Lock file | `flock -n 9 || exit 1` (with `9>"$lockfile"`) |
+| Retry | `for i in 1 2 3; do cmd && break; sleep $i; done` |
+| Debug trace | `set -x` / `set +x` |
+| Dry run check | `[[ "$DRY_RUN" == true ]] && echo "would: $*" \|\| "$@"` |
+
+</CheatSection>

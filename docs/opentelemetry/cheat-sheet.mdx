@@ -1,0 +1,106 @@
+---
+title: OpenTelemetry Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# OpenTelemetry Cheat Sheet
+
+<CheatSection title="Key Concepts">
+
+| Term | Meaning |
+|------|---------|
+| **Trace** | End-to-end request journey across services |
+| **Span** | One unit of work (DB query, HTTP call, function) |
+| **Trace ID** | 128-bit hex ID shared by all spans in a trace |
+| **Span ID** | 64-bit hex ID unique to one span |
+| **Parent span** | The span that created this span |
+| **Attribute** | Key-value metadata on a span or resource |
+| **Event** | Timestamped annotation inside a span |
+| **Status** | OK · ERROR · UNSET |
+| **Resource** | Attributes describing the service (name, version, env) |
+| **Baggage** | Key-values propagated alongside trace context |
+| **OTLP** | OpenTelemetry Protocol (protobuf over gRPC or HTTP) |
+| **Collector** | Proxy that receives, processes, and exports telemetry |
+
+</CheatSection>
+
+<CheatSection title="Environment Variables">
+
+| Variable | Purpose |
+|----------|---------|
+| `OTEL_SERVICE_NAME` | Service name (required) |
+| `OTEL_SERVICE_VERSION` | Service version |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector endpoint (e.g. `http://localhost:4317`) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` · `http/protobuf` · `http/json` |
+| `OTEL_TRACES_SAMPLER` | `always_on` · `traceidratio` · `parentbased_traceidratio` |
+| `OTEL_TRACES_SAMPLER_ARG` | Sampling ratio (e.g. `0.1` for 10%) |
+| `OTEL_RESOURCE_ATTRIBUTES` | Comma-separated `key=value` resource attributes |
+| `OTEL_PROPAGATORS` | `tracecontext,baggage` (default) |
+| `OTEL_LOG_LEVEL` | `debug` · `info` · `warn` · `error` |
+
+</CheatSection>
+
+<CheatSection title="Collector Config Snippets">
+
+| Section | Minimal config |
+|---------|---------------|
+| **OTLP receiver** | `receivers: otlp: protocols: grpc: endpoint: 0.0.0.0:4317` |
+| **Batch processor** | `processors: batch: timeout: 1s send_batch_size: 1024` |
+| **Memory limiter** | `processors: memory_limiter: check_interval: 5s limit_percentage: 80` |
+| **Tempo exporter** | `exporters: otlp/tempo: endpoint: tempo:4317 tls: insecure: true` |
+| **Prometheus exporter** | `exporters: prometheusremotewrite: endpoint: http://mimir:9009/api/v1/push` |
+| **Loki exporter** | `exporters: loki: endpoint: http://loki:3100/loki/api/v1/push` |
+| **Debug exporter** | `exporters: debug: verbosity: detailed` |
+| **Pipeline** | `service: pipelines: traces: receivers: [otlp] processors: [memory_limiter, batch] exporters: [otlp/tempo]` |
+
+</CheatSection>
+
+<CheatSection title="SDK Setup Patterns">
+
+| Language | Auto-instrumentation command |
+|----------|---------------------------|
+| Python | `opentelemetry-instrument --service-name svc python app.py` |
+| Node.js | `node --require @opentelemetry/auto-instrumentations-node/register app.js` |
+| Java | `java -javaagent:opentelemetry-javaagent.jar -jar app.jar` |
+| .NET | `OTEL_DOTNET_AUTO_HOME=... ./instrument.sh dotnet app.dll` |
+| Go | Manual SDK (no agent); use `otlptracegrpc.New()` |
+
+</CheatSection>
+
+<CheatSection title="Sampling">
+
+| Strategy | Config | Best for |
+|----------|--------|---------|
+| Always on | `OTEL_TRACES_SAMPLER=always_on` | Dev, low traffic |
+| 10% head sample | `traceidratio` + `0.1` | High-throughput baseline |
+| Respect parent | `parentbased_traceidratio` | Distributed systems |
+| Sample errors | Collector `tail_sampling` processor with `status_code: ERROR` | Never miss failures |
+| Sample slow | Collector `tail_sampling` with `latency: threshold_ms: 1000` | Catch outliers |
+
+</CheatSection>
+
+<CheatSection title="Kubernetes Operator">
+
+| Step | Command / YAML |
+|------|---------------|
+| Install operator | `helm install otel-operator open-telemetry/opentelemetry-operator` |
+| Create Instrumentation CR | `kind: Instrumentation` with `exporter.endpoint` + `sampler` config |
+| Auto-instrument Python pod | Annotation: `instrumentation.opentelemetry.io/inject-python: "true"` |
+| Auto-instrument Node pod | Annotation: `instrumentation.opentelemetry.io/inject-nodejs: "true"` |
+| Auto-instrument Java pod | Annotation: `instrumentation.opentelemetry.io/inject-java: "true"` |
+| Collector DaemonSet | `helm install otel-collector open-telemetry/opentelemetry-collector --set mode=daemonset` |
+
+</CheatSection>
+
+<CheatSection title="Debugging the Collector">
+
+| Command | What it checks |
+|---------|---------------|
+| `curl http://collector:8888/metrics` | Collector's own metrics (queue size, drop rate) |
+| `curl http://collector:13133/` | Health check endpoint |
+| `curl http://collector:55679/debug/tracez` | zpages — in-memory trace browser |
+| Add `debug` exporter to pipeline | Print all spans/metrics/logs to Collector stdout |
+| `otelcol validate --config config.yaml` | Validate config without starting |
+
+</CheatSection>

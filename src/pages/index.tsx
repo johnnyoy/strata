@@ -89,6 +89,24 @@ const TOPICS = [
     icon: 'TS',
     desc: 'Static types for JavaScript — generics, utility types, and strict patterns.',
   },
+  {
+    name: 'Go',
+    path: '/docs/go',
+    icon: 'Go',
+    desc: 'Concurrency, interfaces, and the toolchain behind Kubernetes and Docker.',
+  },
+  {
+    name: 'Bash',
+    path: '/docs/bash',
+    icon: '$>',
+    desc: 'Shell scripting — variables, text processing, and CI/CD automation.',
+  },
+  {
+    name: 'OpenTelemetry',
+    path: '/docs/opentelemetry',
+    icon: '🔭',
+    desc: 'Distributed tracing, metrics, and logs — the CNCF observability standard.',
+  },
 ];
 
 function Hero() {

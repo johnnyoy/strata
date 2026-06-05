@@ -97,6 +97,9 @@ const config: Config = {
             {label: 'GitHub Actions', to: '/docs/github-actions'},
             {label: 'Helm', to: '/docs/helm'},
             {label: 'TypeScript', to: '/docs/typescript'},
+            {label: 'Go', to: '/docs/go'},
+            {label: 'Bash', to: '/docs/bash'},
+            {label: 'OpenTelemetry', to: '/docs/opentelemetry'},
           ],
         },
         {

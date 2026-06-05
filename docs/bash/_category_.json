@@ -1,0 +1,9 @@
+{
+  "label": "Bash",
+  "position": 16,
+  "link": {
+    "type": "generated-index",
+    "slug": "/bash",
+    "description": "Bash scripting — variables, control flow, text processing with sed and awk, and CI/CD automation patterns."
+  }
+}
