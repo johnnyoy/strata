@@ -1,0 +1,273 @@
+---
+title: Production Observability
+sidebar_label: Production
+sidebar_position: 3
+tutorials:
+  - label: "OTel Collector configuration"
+    url: https://opentelemetry.io/docs/collector/configuration/
+  - label: "OTel Kubernetes Operator"
+    url: https://opentelemetry.io/docs/platforms/kubernetes/operator/
+  - label: "Tail sampling processor"
+    url: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor
+---
+
+# Production Observability
+
+<Level show="short">
+Key production concerns: **tail sampling** (sample on outcome, not randomly), **Collector as gateway** (decouple apps from backends), and **cost control** (filter/aggregate before export).
+
+```bash
+# OTel Collector as a sidecar or DaemonSet on Kubernetes
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+helm install otel-collector open-telemetry/opentelemetry-collector \
+  --values collector-values.yaml
+```
+</Level>
+
+<Level show="medium">
+**Collector deployment patterns on Kubernetes**
+
+**DaemonSet** (most common — one Collector per node):
+```yaml
+# Collects from all pods on the node via OTLP or hostPath
+# Apps send to http://$(NODE_IP):4317 via downward API
+env:
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://$(NODE_IP):4317"
+  - name: NODE_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+```
+
+**Gateway** (centralized — deployment with multiple replicas):
+```yaml
+# Apps → DaemonSet → Gateway → backends
+# Gateway handles auth, sampling, routing
+# Useful for: cross-cluster aggregation, central auth headers, fan-out
+```
+
+**Complete Collector config for Kubernetes**
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+  # Scrape Prometheus /metrics endpoints
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "k8s-pods"
+          kubernetes_sd_configs:
+            - role: pod
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+              action: keep
+              regex: "true"
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  batch:
+    timeout: 1s
+    send_batch_size: 8192
+
+  k8sattributes:
+    extract:
+      metadata:
+        - k8s.pod.name
+        - k8s.pod.uid
+        - k8s.namespace.name
+        - k8s.deployment.name
+        - k8s.node.name
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls: { insecure: true }
+
+  prometheusremotewrite:
+    endpoint: http://mimir:9009/api/v1/push
+
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, batch]
+      exporters: [otlp/tempo]
+
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, batch]
+      exporters: [loki]
+```
+
+**Exporters — backend routing**
+
+| Backend | Exporter | Protocol |
+|---------|----------|---------|
+| Grafana Tempo | `otlp` | OTLP/gRPC |
+| Jaeger | `jaeger` or `otlp` | OTLP/gRPC (Jaeger v1.35+) |
+| Grafana Mimir | `prometheusremotewrite` | Prometheus remote write |
+| Prometheus | `prometheus` | Scrape endpoint |
+| Grafana Loki | `loki` | Loki HTTP push |
+| Datadog | `datadog` | Datadog API |
+| AWS X-Ray | `awsxray` | X-Ray API |
+| Google Cloud | `googlecloud` | Cloud Trace/Monitoring API |
+</Level>
+
+<Level show="long">
+**Tail sampling — architecture**
+
+Tail sampling requires buffering entire traces before making the sampling decision. This means the Collector must:
+1. Receive spans from all services
+2. Group them by trace ID (spans can arrive from different service instances)
+3. Wait for the trace to complete (configurable window)
+4. Apply policies and decide keep/drop
+
+```yaml
+# Requires a load balancer that routes by trace ID (not round-robin)
+exporters:
+  loadbalancing:
+    routing_key: traceID   # consistent hashing on trace ID
+    protocol:
+      otlp:
+        tls: { insecure: true }
+    resolver:
+      k8s:
+        service: otel-collector-headless   # headless service for direct pod IPs
+```
+
+Then each Collector shard applies tail sampling independently.
+
+**Cost control — reducing cardinality**
+
+High-cardinality attributes (user IDs, request IDs in metric labels) inflate storage costs:
+
+```yaml
+processors:
+  # Remove high-cardinality attributes from metrics
+  attributes/metrics:
+    include:
+      match_type: regexp
+      metric_names: [".*"]
+    actions:
+      - key: user.id
+        action: delete
+      - key: http.request.id
+        action: delete
+
+  # Convert histograms to summaries (reduces series count)
+  metricstransform:
+    transforms:
+      - include: "http.server.duration"
+        action: update
+        new_name: "http_server_duration_seconds"
+```
+
+**Alerting on spans — OTel + Grafana**
+
+```yaml
+# Grafana alert rule using TraceQL (Tempo)
+# Alert when p99 latency > 2s for any service
+{
+  "query": "{ duration > 2s } | rate() by (resource.service.name)",
+  "threshold": 0.01   # > 1% of traces exceeding 2s
+}
+```
+
+**Kubernetes Operator — auto-instrumentation**
+
+The OTel Operator watches `Instrumentation` CRDs and injects SDKs via init containers and env vars:
+
+```yaml
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: otel-instrumentation
+spec:
+  exporter:
+    endpoint: http://otel-collector:4317
+  propagators:
+    - tracecontext
+    - baggage
+  sampler:
+    type: parentbased_traceidratio
+    argument: "0.25"   # 25% sampling
+  python:
+    env:
+      - name: OTEL_PYTHON_LOG_CORRELATION
+        value: "true"
+  nodejs:
+    env:
+      - name: OTEL_NODE_ENABLED_INSTRUMENTATIONS
+        value: "http,express,pg"
+```
+
+```yaml
+# Opt-in per deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    instrumentation.opentelemetry.io/inject-python: "true"
+    # or: inject-java, inject-nodejs, inject-dotnet
+```
+
+**Debugging the Collector pipeline**
+
+```yaml
+# Add debug exporter to any pipeline temporarily
+exporters:
+  debug:
+    verbosity: detailed   # detailed | normal | basic
+
+service:
+  pipelines:
+    traces:
+      exporters: [otlp/tempo, debug]   # tee to both
+```
+
+```bash
+# Health check and pipeline metrics
+curl http://collector:8888/metrics   # Collector's own metrics (drop rate, queue size)
+curl http://collector:13133/        # Health check endpoint
+
+# zpages — in-memory trace/span browser (dev only)
+extensions:
+  zpages:
+    endpoint: 0.0.0.0:55679
+# Then browse: http://collector:55679/debug/tracez
+```
+
+**Connecting to Grafana stack**
+
+With the LGTM stack (Loki, Grafana, Tempo, Mimir), all three signals correlate in Grafana:
+- Traces in Tempo link to logs in Loki via trace ID
+- Metrics in Mimir can jump to example traces in Tempo (exemplars)
+- Logs in Loki show trace IDs as clickable links
+
+Enable exemplars in your metrics SDK:
+
+```go
+// Record a histogram observation with a trace exemplar
+histogram.Record(ctx, latency.Seconds(),
+    metric.WithAttributes(/* dimensions */),
+    // SDK auto-attaches trace_id and span_id from context as exemplar
+)
+```
+</Level>

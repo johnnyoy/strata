@@ -1,0 +1,302 @@
+---
+title: Automation Patterns
+sidebar_label: Automation
+sidebar_position: 3
+tutorials:
+  - label: "Bash error handling"
+    url: https://mywiki.wooledge.org/BashFAQ/105
+  - label: "Cron expression reference"
+    url: https://crontab.guru/
+  - label: "ShellCheck wiki"
+    url: https://www.shellcheck.net/wiki/
+---
+
+# Automation Patterns
+
+<Level show="short">
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+log() { echo "[$(date +%T)] $*" >&2; }
+die() { log "ERROR: $*"; exit 1; }
+
+[[ -f "$1" ]] || die "File not found: $1"
+log "Processing $1"
+```
+
+Essential CI/CD patterns: `set -euo pipefail`, log to stderr, trap for cleanup, explicit exit codes.
+</Level>
+
+<Level show="medium">
+**Error handling and exit codes**
+
+```bash
+set -euo pipefail   # safe script header
+
+# Check exit status explicitly
+if ! command -v docker &>/dev/null; then
+    echo "Docker is not installed" >&2
+    exit 1
+fi
+
+# Capture and check
+output=$(some_command) || {
+    echo "Command failed" >&2
+    exit 1
+}
+
+# Exit codes: 0=success, 1=general error, 2=misuse, 126=not executable,
+#             127=not found, 128+N=killed by signal N
+```
+
+**Logging patterns**
+
+```bash
+# Timestamp to stderr (doesn't pollute stdout output)
+log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
+info() { log "INFO  $*"; }
+warn() { log "WARN  $*"; }
+die()  { log "ERROR $*"; exit 1; }
+
+# Usage
+info "Starting deployment"
+warn "Config file missing, using defaults"
+[[ -d "$DEPLOY_DIR" ]] || die "Deploy dir not found: $DEPLOY_DIR"
+```
+
+**Traps — cleanup on exit**
+
+```bash
+TMPDIR=$(mktemp -d)
+LOCKFILE="/var/run/myapp.lock"
+
+cleanup() {
+    local exit_code=$?
+    rm -rf "$TMPDIR"
+    rm -f "$LOCKFILE"
+    [[ $exit_code -ne 0 ]] && echo "Script failed with exit $exit_code" >&2
+}
+trap cleanup EXIT
+trap 'echo "Interrupted" >&2; exit 1' INT TERM
+
+# Now TMPDIR and LOCKFILE are always cleaned up
+exec 200>"$LOCKFILE"
+flock -n 200 || die "Another instance is running"
+```
+
+**Input validation**
+
+```bash
+usage() {
+    cat >&2 <<EOF
+Usage: $0 [options] <environment>
+
+Options:
+  -v, --verbose    Enable verbose output
+  -n, --dry-run    Show what would be done
+  -h, --help       Show this message
+
+Arguments:
+  environment      Target environment (dev|staging|prod)
+EOF
+    exit "${1:-1}"
+}
+
+VERBOSE=false
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -v|--verbose) VERBOSE=true ;;
+        -n|--dry-run) DRY_RUN=true ;;
+        -h|--help)    usage 0 ;;
+        -*)           die "Unknown option: $1" ;;
+        *)            break ;;
+    esac
+    shift
+done
+
+[[ $# -eq 1 ]] || usage
+ENV="$1"
+[[ "$ENV" =~ ^(dev|staging|prod)$ ]] || die "Invalid environment: $ENV"
+```
+
+**Running commands safely**
+
+```bash
+# Dry-run wrapper
+run() {
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "[dry-run] $*" >&2
+    else
+        "$@"
+    fi
+}
+
+run kubectl apply -f deployment.yaml
+
+# Retry with backoff
+retry() {
+    local max=$1; shift
+    local delay=1
+    for ((i=1; i<=max; i++)); do
+        "$@" && return 0
+        [[ $i -lt $max ]] && { echo "Attempt $i failed, retrying in ${delay}s..." >&2; sleep $delay; delay=$((delay*2)); }
+    done
+    echo "All $max attempts failed" >&2
+    return 1
+}
+
+retry 5 curl -f https://api.example.com/health
+```
+
+**Cron syntax**
+
+```
+# ┌──────── minute (0-59)
+# │ ┌────── hour (0-23)
+# │ │ ┌──── day of month (1-31)
+# │ │ │ ┌── month (1-12)
+# │ │ │ │ ┌ day of week (0-7, 0=Sun)
+# │ │ │ │ │
+  * * * * *  command
+
+0 6 * * 1     # every Monday at 6:00 AM
+*/15 * * * *  # every 15 minutes
+0 2 * * *     # daily at 2:00 AM
+0 0 1 * *     # first of every month at midnight
+```
+
+```bash
+crontab -l        # list current user's crons
+crontab -e        # edit current user's crons
+crontab -r        # remove all crons (careful!)
+```
+</Level>
+
+<Level show="long">
+**`flock` — script locking**
+
+```bash
+LOCKFILE="/var/lock/myapp.lock"
+
+# Method 1: subshell with exclusive lock
+(
+    flock -n 9 || { echo "Already running" >&2; exit 1; }
+    # Your script here
+) 9>"$LOCKFILE"
+
+# Method 2: fd in current shell
+exec 9>"$LOCKFILE"
+flock -n 9 || { echo "Already running" >&2; exit 1; }
+trap "rm -f $LOCKFILE" EXIT
+```
+
+**Here-documents and here-strings**
+
+```bash
+# Here-document — multi-line stdin
+cat <<EOF
+This is line 1
+This is line 2 with variable: $HOME
+EOF
+
+# Indented here-doc (<<-)  — strips leading tabs
+if true; then
+    cat <<-EOF
+        This is indented source
+        but tabs are stripped from output
+        EOF
+fi
+
+# No-interpolation — single-quote the delimiter
+cat <<'EOF'
+No $interpolation here
+$HOME is literal
+EOF
+
+# Here-string — single line to stdin
+grep "pattern" <<< "$variable"
+```
+
+**Process substitution**
+
+```bash
+# <(cmd) — treat output of cmd as a file
+diff <(sort file1.txt) <(sort file2.txt)
+
+# >(cmd) — treat input of cmd as a file (write to it)
+tee >(gzip > output.gz) >(wc -l >&2) < input.txt
+
+# Join sorted files, find common lines
+comm -12 <(sort list1.txt) <(sort list2.txt)
+```
+
+**String manipulation patterns**
+
+```bash
+path="/var/log/myapp/app.log.2025-01-15"
+
+# Parameter expansion cheatsheet
+${path##*/}          # app.log.2025-01-15 (remove longest prefix before /)
+${path%/*}           # /var/log/myapp (remove shortest suffix after /)
+${path##*.}          # 2025-01-15 (extension)
+${path%.*}           # /var/log/myapp/app.log (strip last extension)
+${path//log/LOG}     # replace all "log" with "LOG"
+${path/#\/var/\/opt} # replace prefix /var with /opt
+
+# Default values
+${var:-default}      # use default if var unset or empty
+${var:=default}      # assign default if var unset or empty
+${var:?error msg}    # error and exit if var unset or empty
+${var:+value}        # use value if var IS set
+
+# Length and substrings
+${#path}             # string length
+${path:5}            # from index 5 to end
+${path:5:10}         # 10 chars starting at index 5
+```
+
+**Parallel execution**
+
+```bash
+# Background jobs
+for server in "${servers[@]}"; do
+    ssh "$server" "df -h" &
+done
+wait   # wait for all background jobs
+
+# With xargs -P
+printf '%s\n' "${servers[@]}" | xargs -P 4 -I{} ssh {} "df -h"
+
+# Track results
+declare -A pids
+for item in "${items[@]}"; do
+    process_item "$item" &
+    pids[$item]=$!
+done
+
+for item in "${!pids[@]}"; do
+    if wait "${pids[$item]}"; then
+        echo "$item: success"
+    else
+        echo "$item: FAILED"
+    fi
+done
+```
+
+**Debugging**
+
+```bash
+set -x            # print each command before running
+set +x            # turn off tracing
+
+bash -n script.sh  # syntax check without running
+bash -x script.sh  # trace execution
+shellcheck script.sh  # static analysis (catches common bugs)
+
+# Log to file with timestamps
+exec > >(tee -a /var/log/myapp/deploy.log) 2>&1
+```
+</Level>

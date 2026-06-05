@@ -1,0 +1,9 @@
+{
+  "label": "OpenTelemetry",
+  "position": 17,
+  "link": {
+    "type": "generated-index",
+    "slug": "/opentelemetry",
+    "description": "OpenTelemetry — distributed tracing, metrics, and logs. The CNCF standard for cloud-native observability."
+  }
+}

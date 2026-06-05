@@ -1,0 +1,298 @@
+---
+title: Go Basics
+sidebar_label: Basics
+sidebar_position: 1
+tutorials:
+  - label: "A Tour of Go"
+    url: https://go.dev/tour/
+  - label: "Go documentation"
+    url: https://go.dev/doc/
+  - label: "Go by Example"
+    url: https://gobyexample.com/
+---
+
+# Go Basics
+
+<Level show="short">
+```go
+package main
+
+import "fmt"
+
+func greet(name string) string {
+    return fmt.Sprintf("Hello, %s!", name)
+}
+
+func main() {
+    fmt.Println(greet("world"))
+}
+```
+
+```bash
+go mod init myapp   # create module
+go run main.go      # run
+go build .          # compile binary
+go test ./...       # run tests
+```
+
+Functions return errors as a second value: `result, err := doSomething()`
+</Level>
+
+<Level show="medium">
+**Types and variables**
+
+```go
+// Short declaration (infers type)
+x := 42
+name := "alice"
+active := true
+
+// Explicit type
+var count int = 0
+var items []string
+
+// Multiple assignment
+a, b := 10, 20
+a, b = b, a   // swap
+
+// Constants
+const MaxRetries = 3
+const (
+    StatusOK    = 200
+    StatusNotFound = 404
+)
+```
+
+**Structs and methods**
+
+```go
+type User struct {
+    ID    int
+    Name  string
+    Email string
+}
+
+// Method with pointer receiver (can mutate)
+func (u *User) Rename(name string) {
+    u.Name = name
+}
+
+// Method with value receiver (read-only copy)
+func (u User) Display() string {
+    return fmt.Sprintf("%d: %s <%s>", u.ID, u.Name, u.Email)
+}
+
+alice := User{ID: 1, Name: "Alice", Email: "alice@example.com"}
+alice.Rename("Alicia")
+fmt.Println(alice.Display())
+```
+
+**Interfaces**
+
+```go
+type Stringer interface {
+    String() string
+}
+
+// User satisfies Stringer if it has a String() method
+func (u User) String() string {
+    return u.Display()
+}
+
+func print(s Stringer) {
+    fmt.Println(s.String())
+}
+```
+
+**Error handling — the Go pattern**
+
+```go
+import (
+    "errors"
+    "fmt"
+    "os"
+)
+
+var ErrNotFound = errors.New("not found")
+
+func readConfig(path string) ([]byte, error) {
+    data, err := os.ReadFile(path)
+    if err != nil {
+        return nil, fmt.Errorf("readConfig %s: %w", path, err)  // wrap with context
+    }
+    return data, nil
+}
+
+data, err := readConfig("config.json")
+if err != nil {
+    if errors.Is(err, os.ErrNotExist) {
+        // handle missing file specifically
+    }
+    log.Fatal(err)
+}
+```
+
+**Slices and maps**
+
+```go
+// Slice
+nums := []int{1, 2, 3}
+nums = append(nums, 4, 5)
+nums[1:3]       // [2, 3] — slices share backing array
+
+// Make with capacity
+buf := make([]byte, 0, 1024)
+
+// Map
+scores := map[string]int{"alice": 95, "bob": 87}
+scores["carol"] = 91
+val, ok := scores["alice"]   // ok = true if key exists
+delete(scores, "bob")
+
+// Iterate
+for k, v := range scores {
+    fmt.Printf("%s: %d\n", k, v)
+}
+```
+
+**Toolchain**
+
+```bash
+go mod init github.com/myorg/myapp   # create go.mod
+go get github.com/some/package@v1.2  # add dependency
+go mod tidy                          # remove unused deps
+go build ./...                       # build all packages
+go test ./...                        # run all tests
+go test -run TestFoo ./pkg/...       # run specific test
+go vet ./...                         # static analysis
+go fmt ./...                         # format all files
+```
+</Level>
+
+<Level show="long">
+**Interface satisfaction is implicit**
+
+Go has no `implements` keyword. A type satisfies an interface if it has all the required methods — checked at compile time.
+
+```go
+type Writer interface {
+    Write(p []byte) (n int, err error)
+}
+
+// *os.File satisfies Writer — no declaration needed
+var w Writer = os.Stdout
+
+// Check at runtime
+if stringer, ok := w.(fmt.Stringer); ok {
+    fmt.Println(stringer.String())
+}
+```
+
+**Empty interface and type switches**
+
+```go
+func describe(i interface{}) string {   // pre-1.18: interface{}; 1.18+: any
+    switch v := i.(type) {
+    case int:
+        return fmt.Sprintf("int: %d", v)
+    case string:
+        return fmt.Sprintf("string: %q", v)
+    case []byte:
+        return fmt.Sprintf("bytes: %d bytes", len(v))
+    default:
+        return fmt.Sprintf("unknown: %T", v)
+    }
+}
+```
+
+**`defer` — cleanup on function exit**
+
+```go
+func copyFile(src, dst string) error {
+    f, err := os.Open(src)
+    if err != nil {
+        return err
+    }
+    defer f.Close()   // runs when copyFile returns, even on error
+
+    out, err := os.Create(dst)
+    if err != nil {
+        return err
+    }
+    defer out.Close()
+
+    _, err = io.Copy(out, f)
+    return err
+}
+```
+
+Defers run LIFO (last-in, first-out). Arguments are evaluated immediately at the `defer` call.
+
+**Pointers**
+
+```go
+x := 42
+p := &x     // p is *int
+*p = 99     // dereference: x is now 99
+
+// When to use pointer receivers
+// Use *T when: method mutates the receiver, or T is large (avoids copy)
+// Use T  when: method is read-only and T is small (int, small struct)
+```
+
+**`panic` and `recover`**
+
+```go
+func safeDiv(a, b int) (result int, err error) {
+    defer func() {
+        if r := recover(); r != nil {
+            err = fmt.Errorf("recovered panic: %v", r)
+        }
+    }()
+    return a / b, nil   // panics if b == 0
+}
+```
+
+`recover` only works inside a `defer`. Use it to prevent panics from crashing the entire program (e.g., in HTTP handlers).
+
+**Generics (Go 1.18+)**
+
+```go
+func Map[T, U any](s []T, f func(T) U) []U {
+    result := make([]U, len(s))
+    for i, v := range s {
+        result[i] = f(v)
+    }
+    return result
+}
+
+// Constraint: only numeric types
+type Number interface {
+    ~int | ~int64 | ~float64
+}
+
+func Sum[T Number](nums []T) T {
+    var total T
+    for _, n := range nums {
+        total += n
+    }
+    return total
+}
+```
+
+**`init` functions and package initialization order**
+
+```go
+var db *sql.DB
+
+func init() {
+    var err error
+    db, err = sql.Open("postgres", os.Getenv("DATABASE_URL"))
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+`init` runs automatically after all variable initializations in the package. A package can have multiple `init` functions across files; they run in the order files are processed.
+</Level>

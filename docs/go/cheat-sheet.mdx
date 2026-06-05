@@ -1,0 +1,124 @@
+---
+title: Go Cheat Sheet
+sidebar_label: Cheat Sheet
+sidebar_position: 99
+---
+
+# Go Cheat Sheet
+
+<CheatSection title="Toolchain">
+
+| Command | What it does |
+|---------|-------------|
+| `go mod init github.com/org/repo` | Create a new module |
+| `go get package@version` | Add or upgrade a dependency |
+| `go mod tidy` | Remove unused dependencies |
+| `go build ./...` | Build all packages |
+| `go run main.go` | Compile and run directly |
+| `go test ./...` | Run all tests |
+| `go test -race ./...` | Run tests with race detector |
+| `go test -run TestFoo ./pkg` | Run a specific test |
+| `go vet ./...` | Static analysis |
+| `go fmt ./...` | Format all files |
+| `go doc net/http` | Show package documentation |
+| `GOOS=linux GOARCH=amd64 go build` | Cross-compile |
+
+</CheatSection>
+
+<CheatSection title="Types & Variables">
+
+| Syntax | Purpose |
+|--------|---------|
+| `x := 42` | Short variable declaration (infer type) |
+| `var x int = 42` | Explicit type |
+| `var x, y int` | Multiple variables |
+| `const Pi = 3.14` | Constant |
+| `const ( A=1; B=2 )` | Constant block |
+| `type User struct { Name string }` | Struct type |
+| `type ID int` | Type alias |
+| `type Stringer interface { String() string }` | Interface |
+| `[]int{1, 2, 3}` | Slice literal |
+| `map[string]int{"a": 1}` | Map literal |
+| `make(chan int, 10)` | Buffered channel |
+
+</CheatSection>
+
+<CheatSection title="Functions">
+
+| Pattern | Syntax |
+|---------|--------|
+| Basic | `func f(x int) int { return x+1 }` |
+| Multiple returns | `func f() (int, error)` |
+| Named returns | `func f() (result int, err error)` |
+| Variadic | `func f(nums ...int)` |
+| Method | `func (u *User) Save() error` |
+| Defer | `defer f.Close()` |
+| Goroutine | `go func() { ... }()` |
+| Anonymous | `fn := func(x int) int { return x*2 }` |
+
+</CheatSection>
+
+<CheatSection title="Error Handling">
+
+| Pattern | Code |
+|---------|------|
+| Check error | `if err != nil { return err }` |
+| Wrap with context | `fmt.Errorf("load config: %w", err)` |
+| Sentinel error | `var ErrNotFound = errors.New("not found")` |
+| Check type | `errors.Is(err, ErrNotFound)` |
+| Unwrap | `var e *MyError; errors.As(err, &e)` |
+| Log and exit | `log.Fatalf("fatal: %v", err)` |
+
+</CheatSection>
+
+<CheatSection title="Goroutines & Channels">
+
+| Pattern | Code |
+|---------|------|
+| Launch goroutine | `go doWork()` |
+| Unbuffered channel | `ch := make(chan int)` |
+| Buffered channel | `ch := make(chan int, 10)` |
+| Send | `ch <- value` |
+| Receive | `value := <-ch` |
+| Close | `close(ch)` |
+| Range over channel | `for v := range ch { }` |
+| Select | `select { case v := <-ch: ... }` |
+| WaitGroup | `wg.Add(1); go func() { defer wg.Done(); ... }(); wg.Wait()` |
+| Mutex | `mu.Lock(); defer mu.Unlock()` |
+| Once | `once.Do(func() { init() })` |
+| Cancel context | `ctx, cancel := context.WithTimeout(ctx, 5*time.Second); defer cancel()` |
+
+</CheatSection>
+
+<CheatSection title="HTTP">
+
+| Pattern | Code |
+|---------|------|
+| Simple GET | `resp, err := http.Get(url)` |
+| Custom client | `client := &http.Client{Timeout: 10*time.Second}` |
+| POST with body | `http.Post(url, "application/json", bytes.NewReader(body))` |
+| Request with context | `req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)` |
+| Handle route | `http.HandleFunc("GET /path", handler)` |
+| Start server | `http.ListenAndServe(":8080", nil)` |
+| JSON decode | `json.NewDecoder(r.Body).Decode(&v)` |
+| JSON encode | `json.NewEncoder(w).Encode(v)` |
+| Write error | `http.Error(w, msg, http.StatusInternalServerError)` |
+
+</CheatSection>
+
+<CheatSection title="Common stdlib">
+
+| Package | Key functions |
+|---------|--------------|
+| `fmt` | `Sprintf`, `Errorf`, `Fprintf(os.Stderr, ...)` |
+| `os` | `ReadFile`, `WriteFile`, `Getenv`, `Exit(1)` |
+| `strings` | `Contains`, `HasPrefix`, `Split`, `Join`, `TrimSpace`, `ReplaceAll` |
+| `filepath` | `Join`, `Base`, `Dir`, `Ext`, `Glob` |
+| `time` | `Now()`, `Since(t)`, `Sleep(d)`, `t.Format("2006-01-02")` |
+| `log` | `Printf`, `Fatalf`, `Fatal` |
+| `io` | `ReadAll`, `Copy`, `Discard` |
+| `bytes` | `Buffer`, `NewReader`, `Contains` |
+| `sort` | `Slice(s, less)`, `Search` |
+| `sync` | `WaitGroup`, `Mutex`, `RWMutex`, `Once`, `Map` |
+
+</CheatSection>
