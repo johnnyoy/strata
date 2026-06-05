@@ -1,0 +1,160 @@
+---
+title: Remotes
+sidebar_label: Remotes
+sidebar_position: 3
+tutorials:
+  - label: "Git remote documentation"
+    url: https://git-scm.com/docs/git-remote
+  - label: "About remote repositories"
+    url: https://docs.github.com/en/get-started/getting-started-with-git/about-remote-repositories
+---
+
+# Remotes
+
+<Level show="short">
+A remote is a named URL. `origin` is the conventional name for the repo you cloned from.
+
+```bash
+git remote -v                    # list remotes
+git fetch origin                 # download changes, don't merge
+git pull origin main             # fetch + merge
+git push origin main             # upload commits
+git push -u origin feature       # push + set upstream tracking
+```
+</Level>
+
+<Level show="medium">
+**Managing remotes**
+
+```bash
+git remote add origin https://github.com/user/repo.git
+git remote rename origin upstream
+git remote remove old-remote
+git remote set-url origin git@github.com:user/repo.git  # switch to SSH
+git remote -v                  # show fetch and push URLs
+```
+
+**Fetch vs pull**
+
+```bash
+# fetch — download remote commits into origin/* refs; doesn't touch working tree
+git fetch origin
+git fetch --all                # fetch all remotes
+git fetch origin main          # fetch specific branch only
+
+# pull = fetch + merge (or rebase)
+git pull origin main
+git pull --rebase origin main  # rebase local commits on top of fetched
+git pull --ff-only             # fail if not a fast-forward (safe default)
+```
+
+**Remote-tracking branches**
+
+After `git fetch`, remote branches are visible as `origin/<branch>`:
+
+```bash
+git branch -r                  # list remote-tracking branches
+git log origin/main            # inspect without checking out
+git diff HEAD origin/main      # compare local HEAD with remote
+git checkout -b feature origin/feature  # create local branch tracking remote
+```
+
+**Push and upstream tracking**
+
+```bash
+# First push — set upstream so future git push/pull work without arguments
+git push -u origin feature     # -u = --set-upstream
+
+# After upstream is set
+git push                       # pushes current branch to its upstream
+git pull                       # pulls from upstream
+
+# Check tracking config
+git branch -vv                 # shows upstream for each branch
+```
+
+**Safe force push**
+
+```bash
+# Never: git push --force (overwrites remote, loses others' work)
+# Use: --force-with-lease (fails if remote has commits you haven't fetched)
+git push --force-with-lease origin feature
+```
+</Level>
+
+<Level show="long">
+**Refspecs — how fetch/push map references**
+
+Every `fetch` and `push` operates on a refspec: `+<src>:<dst>`
+
+```bash
+# Default fetch refspec (stored in .git/config)
+[remote "origin"]
+    url = https://github.com/user/repo.git
+    fetch = +refs/heads/*:refs/remotes/origin/*
+#           ^ src (remote)         ^ dst (local)
+#   + means "force update" (fast-forward not required)
+
+# Push a local branch to a differently-named remote branch
+git push origin local-branch:remote-branch
+
+# Delete a remote branch
+git push origin :old-branch              # empty src = delete dst
+git push origin --delete old-branch     # explicit form
+
+# Push a tag
+git push origin v1.2.3
+git push origin --tags                  # push all tags
+```
+
+**Partial and shallow clones**
+
+```bash
+# Shallow clone — only recent history (faster CI checkouts)
+git clone --depth 1 https://github.com/user/repo.git
+git fetch --unshallow             # convert back to full clone
+
+# Blobless clone — omit file contents for old commits
+git clone --filter=blob:none https://github.com/user/repo.git
+
+# Treeless clone — omit trees and blobs for old commits (fastest)
+git clone --filter=tree:0 https://github.com/user/repo.git
+```
+
+**FETCH_HEAD**
+
+`git fetch` writes the tip of each fetched branch into `.git/FETCH_HEAD`. You can use it immediately:
+
+```bash
+git fetch origin feature
+git diff FETCH_HEAD    # diff against just-fetched branch
+git merge FETCH_HEAD   # merge without specifying branch name
+```
+
+**Multi-remote workflows**
+
+```bash
+# Fork workflow: origin = your fork, upstream = original project
+git remote add upstream https://github.com/original/repo.git
+git fetch upstream
+git rebase upstream/main        # update your main from upstream
+git push origin main            # sync your fork's main
+
+# Mirror sync (keeping a mirror up to date)
+git fetch upstream
+git push origin --mirror        # mirrors all refs exactly
+```
+
+**Push options (GitHub/GitLab)**
+
+```bash
+# Skip CI for this push
+git push -o ci.skip origin feature
+
+# Create a merge request on push (GitLab)
+git push -o merge_request.create origin feature
+
+# GitHub: push.autoSetupRemote (git 2.37+)
+git config --global push.autoSetupRemote true  # makes -u the default
+```
+</Level>

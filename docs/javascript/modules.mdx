@@ -1,0 +1,233 @@
+---
+title: Modules
+sidebar_label: Modules
+sidebar_position: 3
+tutorials:
+  - label: "MDN: JavaScript modules"
+    url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
+  - label: "Node.js ESM documentation"
+    url: https://nodejs.org/api/esm.html
+  - label: "JavaScript.info: Modules"
+    url: https://javascript.info/modules-intro
+---
+
+# Modules
+
+<Level show="short">
+```js
+// Named exports
+export function add(a, b) { return a + b; }
+export const PI = 3.14159;
+
+// Default export
+export default class Calculator { }
+
+// Import
+import Calculator, { add, PI } from './math.js';
+import * as math from './math.js';     // namespace import
+
+// Dynamic import (lazy loading)
+const { add } = await import('./math.js');
+```
+</Level>
+
+<Level show="medium">
+**Named and default exports**
+
+```js
+// math.js
+export const PI = 3.14159;
+export function add(a, b) { return a + b; }
+export function subtract(a, b) { return a - b; }
+
+// Rename on export
+export { add as sum };
+
+// Default — one per module
+export default function multiply(a, b) { return a * b; }
+```
+
+```js
+// Import named
+import { add, subtract } from './math.js';
+import { add as plus } from './math.js';    // rename on import
+
+// Import default
+import multiply from './math.js';
+
+// Import default + named together
+import multiply, { PI, add } from './math.js';
+
+// Namespace import — all named exports as object
+import * as math from './math.js';
+math.add(1, 2);
+math.PI;
+```
+
+**Re-exports — barrel files**
+
+```js
+// src/utils/index.js — re-export from sub-modules
+export { add, subtract } from './math.js';
+export { format, parse }  from './date.js';
+export { default as Logger } from './logger.js';
+
+// Consumer only needs one import path
+import { add, format, Logger } from './utils/index.js';
+```
+
+**Dynamic `import()`**
+
+```js
+// Load only when needed — returns a Promise
+async function loadChart() {
+  const { Chart } = await import('./heavy-chart-library.js');
+  new Chart('#container', config);
+}
+
+// Conditional loading
+const locale = navigator.language;
+const messages = await import(`./locales/${locale}.js`);
+
+// import.meta — module metadata
+console.log(import.meta.url);          // current module's URL
+const dir = new URL('.', import.meta.url).pathname;  // current dir
+```
+
+**`import.meta.env` (Vite / bundlers)**
+
+```js
+if (import.meta.env.DEV) {
+  console.log('development mode');
+}
+const apiUrl = import.meta.env.VITE_API_URL;
+```
+
+**ES modules are singletons**
+
+Each module is evaluated once. All importers share the same instance:
+
+```js
+// counter.js
+let count = 0;
+export const increment = () => ++count;
+export const getCount = () => count;
+
+// a.js
+import { increment } from './counter.js';
+increment(); increment();
+
+// b.js
+import { getCount } from './counter.js';
+getCount(); // 2 — same counter instance as a.js
+```
+</Level>
+
+<Level show="long">
+**ES module loading pipeline**
+
+The browser (or Node.js) loads ES modules in three phases:
+
+1. **Parse** — fetch and parse the source; build the module graph by resolving `import` specifiers statically (no code runs yet)
+2. **Instantiate** — create bindings for all exports (as live read-only views); link imports to their export bindings
+3. **Evaluate** — run the module body top-to-bottom exactly once; exports become populated
+
+Because parsing is static, `import` specifiers must be string literals (not computed expressions). `import()` is the escape hatch for dynamic resolution.
+
+**Live bindings — exports are not copies**
+
+```js
+// counter.js
+export let count = 0;
+export function increment() { count++; }
+
+// main.js
+import { count, increment } from './counter.js';
+console.log(count); // 0
+increment();
+console.log(count); // 1 — live binding reflects the mutation
+```
+
+Named exports are live read-only bindings to the exporting module's variable. Importing is not a copy — it's a reference into the exporting module's scope.
+
+**CommonJS vs ESM interop**
+
+| Feature | CommonJS (`require`) | ESM (`import`) |
+|---------|---------------------|----------------|
+| Loading | Synchronous, dynamic | Async (top-level), static |
+| Default export | `module.exports = x` | `export default x` |
+| Named exports | `exports.fn = fn` | `export function fn` |
+| `__dirname` | Available | `new URL('.', import.meta.url).pathname` |
+| Conditional require | `if (x) require(...)` | `await import(...)` |
+| File extension | `.js` / `.cjs` | `.js` / `.mjs` |
+
+```json
+// package.json — declare the module type
+{ "type": "module" }    // .js files are ESM
+{ "type": "commonjs" }  // .js files are CJS (default)
+```
+
+```js
+// Force ESM regardless of package.json: use .mjs
+// Force CJS regardless of package.json: use .cjs
+
+// Interop: import a CJS module from ESM
+import lodash from 'lodash';         // gets module.exports as default
+import { map } from 'lodash';        // named imports may not work for all CJS
+
+// Interop: require an ESM module from CJS
+const mod = await import('./esm-module.js');  // async — must use dynamic import
+```
+
+**Circular imports**
+
+ES modules handle circular dependencies by sharing live bindings, but reading an export before the exporting module has run its body yields `undefined`:
+
+```js
+// a.js
+import { b } from './b.js';
+export const a = 'A';
+console.log('a imports b =', b);   // may be undefined if b.js hasn't run yet
+
+// b.js
+import { a } from './a.js';
+export const b = 'B';
+console.log('b imports a =', a);
+```
+
+Fix: move shared values to a third module, or use functions (read lazily at call time, not at parse time).
+
+**Tree-shaking — dead code elimination**
+
+Bundlers (Rollup, Webpack, esbuild) can eliminate unused exports from the final bundle because ESM imports are static:
+
+```js
+// utils.js
+export function used() { ... }
+export function unused() { ... }  // ← tree-shaken out if never imported
+
+// Bundler only includes `used` in output
+import { used } from './utils.js';
+```
+
+Requirements for effective tree-shaking:
+- ESM (not CJS) — static analysis is required
+- No side effects at module level (or declare `"sideEffects": false` in `package.json`)
+- No dynamic access (`utils[dynamicKey]()` defeats analysis)
+
+**Import maps (browsers)**
+
+```html
+<script type="importmap">
+{
+  "imports": {
+    "lodash": "/vendor/lodash.js",
+    "react":  "https://esm.sh/react@18"
+  }
+}
+</script>
+<script type="module">
+  import { debounce } from 'lodash';
+</script>
+```
+</Level>

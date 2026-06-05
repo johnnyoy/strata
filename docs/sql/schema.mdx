@@ -1,0 +1,205 @@
+---
+title: Schema Design
+sidebar_label: Schema
+sidebar_position: 2
+tutorials:
+  - label: "PostgreSQL data types"
+    url: https://www.postgresql.org/docs/current/datatype.html
+  - label: "PostgreSQL constraints"
+    url: https://www.postgresql.org/docs/current/ddl-constraints.html
+  - label: "SQL DDL reference"
+    url: https://www.postgresql.org/docs/current/ddl.html
+---
+
+# Schema Design
+
+<Level show="short">
+```sql
+CREATE TABLE users (
+  id         BIGSERIAL PRIMARY KEY,
+  email      TEXT      NOT NULL UNIQUE,
+  name       TEXT      NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE users ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE;
+DROP TABLE users;
+```
+</Level>
+
+<Level show="medium">
+**Common data types (PostgreSQL)**
+
+| Category | Types | Notes |
+|----------|-------|-------|
+| Integer | `SMALLINT`, `INT`, `BIGINT` | 2/4/8 bytes |
+| Auto-increment | `SERIAL`, `BIGSERIAL` | shorthand for sequence + NOT NULL |
+| Decimal | `NUMERIC(p,s)` | exact; use for money |
+| Float | `REAL`, `DOUBLE PRECISION` | inexact; avoid for money |
+| Text | `TEXT`, `VARCHAR(n)`, `CHAR(n)` | prefer TEXT; VARCHAR(n) rarely needed |
+| Boolean | `BOOLEAN` | `TRUE`/`FALSE`/`NULL` |
+| Date/time | `DATE`, `TIME`, `TIMESTAMP`, `TIMESTAMPTZ` | prefer TIMESTAMPTZ (stores UTC) |
+| UUID | `UUID` | use `gen_random_uuid()` |
+| JSON | `JSON`, `JSONB` | prefer JSONB (binary, indexable) |
+| Array | `INT[]`, `TEXT[]` | first-class arrays |
+
+**Constraints**
+
+```sql
+CREATE TABLE orders (
+  id          BIGSERIAL PRIMARY KEY,                -- unique + not null
+  user_id     BIGINT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status      TEXT       NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending', 'paid', 'shipped', 'cancelled')),
+  amount      NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+  email       TEXT       UNIQUE,                    -- nullable unique column
+  code        TEXT       NOT NULL,
+  region      TEXT       NOT NULL,
+  UNIQUE (code, region)                             -- composite unique
+);
+```
+
+| Constraint | Purpose |
+|------------|---------|
+| `PRIMARY KEY` | Unique + NOT NULL; implicit B-tree index |
+| `NOT NULL` | Column must have a value |
+| `UNIQUE` | No duplicate values (NULLs are not equal) |
+| `CHECK (expr)` | Row must satisfy expression |
+| `REFERENCES table(col)` | Foreign key — referential integrity |
+| `ON DELETE CASCADE` | Delete child rows when parent is deleted |
+| `ON DELETE SET NULL` | Set FK column to NULL when parent deleted |
+| `ON DELETE RESTRICT` | Block parent deletion if children exist |
+
+**ALTER TABLE**
+
+```sql
+ALTER TABLE users ADD COLUMN phone TEXT;
+ALTER TABLE users DROP COLUMN phone;
+ALTER TABLE users ALTER COLUMN name SET NOT NULL;
+ALTER TABLE users ALTER COLUMN name TYPE VARCHAR(255);
+ALTER TABLE users ALTER COLUMN active SET DEFAULT TRUE;
+ALTER TABLE users RENAME COLUMN name TO full_name;
+ALTER TABLE users RENAME TO customers;
+ALTER TABLE orders ADD CONSTRAINT chk_amount CHECK (amount > 0);
+ALTER TABLE orders DROP CONSTRAINT chk_amount;
+```
+
+**INSERT, UPDATE, DELETE**
+
+```sql
+-- INSERT
+INSERT INTO users (email, name) VALUES ('alice@example.com', 'Alice');
+INSERT INTO users (email, name) VALUES
+  ('bob@example.com', 'Bob'),
+  ('carol@example.com', 'Carol');
+
+-- Upsert (PostgreSQL)
+INSERT INTO users (id, email, name)
+VALUES (1, 'alice@example.com', 'Alice')
+ON CONFLICT (id) DO UPDATE
+  SET email = EXCLUDED.email,
+      name  = EXCLUDED.name;
+
+-- UPDATE
+UPDATE users SET active = FALSE WHERE last_login < NOW() - INTERVAL '90 days';
+
+-- DELETE
+DELETE FROM users WHERE id = 42;
+DELETE FROM users WHERE active = FALSE RETURNING id, email;  -- see what was deleted
+```
+</Level>
+
+<Level show="long">
+**Type storage and alignment**
+
+Understanding storage sizes matters for table design at scale:
+
+| Type | Storage | Notes |
+|------|---------|-------|
+| `BOOLEAN` | 1 byte | |
+| `SMALLINT` | 2 bytes | |
+| `INT` | 4 bytes | |
+| `BIGINT` | 8 bytes | |
+| `REAL` | 4 bytes | |
+| `DOUBLE PRECISION` | 8 bytes | |
+| `NUMERIC(p,s)` | 2–40 bytes | variable, exact |
+| `TEXT` / `VARCHAR` | 1–4 bytes + content | TOAST for large values |
+| `TIMESTAMPTZ` | 8 bytes | microseconds since 2000-01-01 |
+| `UUID` | 16 bytes | |
+
+PostgreSQL pads columns to alignment boundaries (4 or 8 bytes). Column order can affect row size:
+
+```sql
+-- Wasteful: BOOL (1) + padding (7) + BIGINT (8) + INT (4) + padding (4) = 24 bytes
+CREATE TABLE bad (flag BOOLEAN, id BIGINT, count INT);
+
+-- Efficient: BIGINT (8) + INT (4) + BOOL (1) + padding (3) = 16 bytes
+CREATE TABLE good (id BIGINT, count INT, flag BOOLEAN);
+```
+
+**Generated columns**
+
+```sql
+ALTER TABLE orders ADD COLUMN
+  total_with_tax NUMERIC(10,2) GENERATED ALWAYS AS (amount * 1.2) STORED;
+```
+
+Generated columns are computed automatically and stored (STORED) or computed on read (VIRTUAL, PostgreSQL 14+ / MySQL). Useful for denormalized summaries and search vectors.
+
+**DDL in transactions**
+
+PostgreSQL supports transactional DDL — you can roll back schema changes:
+
+```sql
+BEGIN;
+  ALTER TABLE users ADD COLUMN score INT;
+  -- test something
+  -- if something is wrong:
+ROLLBACK;
+  -- or commit:
+COMMIT;
+```
+
+Most other databases (MySQL, Oracle) auto-commit DDL. This is a PostgreSQL advantage.
+
+**Domains — reusable type constraints**
+
+```sql
+CREATE DOMAIN email_address AS TEXT
+  CHECK (VALUE ~ '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+
+CREATE TABLE users (
+  email email_address NOT NULL UNIQUE  -- constraint applied everywhere
+);
+```
+
+**Table partitioning (PostgreSQL 10+)**
+
+```sql
+-- Partition orders by year
+CREATE TABLE orders (
+  id         BIGSERIAL,
+  created_at TIMESTAMPTZ NOT NULL,
+  amount     NUMERIC(10,2)
+) PARTITION BY RANGE (created_at);
+
+CREATE TABLE orders_2024
+  PARTITION OF orders
+  FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+
+CREATE TABLE orders_2025
+  PARTITION OF orders
+  FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+```
+
+Queries with `WHERE created_at BETWEEN ...` only scan relevant partitions (partition pruning). Each partition can have its own indexes, tablespace, or even be detached for archival.
+
+**`pg_dump` — schema extraction**
+
+```bash
+pg_dump --schema-only mydb > schema.sql         # DDL only
+pg_dump --data-only --table=users mydb > users.sql  # data only
+pg_dump mydb | gzip > mydb_backup.gz            # full backup
+psql mydb < schema.sql                           # restore
+```
+</Level>

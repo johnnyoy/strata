@@ -1,0 +1,228 @@
+---
+title: Closures and Scope
+sidebar_label: Closures
+sidebar_position: 2
+tutorials:
+  - label: "MDN: Closures"
+    url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures
+  - label: "JavaScript.info: Variable scope"
+    url: https://javascript.info/closure
+---
+
+# Closures and Scope
+
+<Level show="short">
+A closure is a function that remembers the variables from the scope where it was created, even after that scope has finished.
+
+```js
+function makeCounter() {
+  let count = 0;                 // lives in makeCounter's scope
+  return () => ++count;          // returned function closes over count
+}
+
+const counter = makeCounter();
+counter(); // 1
+counter(); // 2  — count persists between calls
+```
+</Level>
+
+<Level show="medium">
+**Scope chain**
+
+Every function has access to its own scope + all enclosing scopes up to the global scope. This chain is fixed at **definition time**, not call time.
+
+```js
+const x = 'global';
+
+function outer() {
+  const x = 'outer';
+
+  function inner() {
+    const x = 'inner';
+    console.log(x);     // 'inner' — own scope wins
+  }
+
+  function middle() {
+    console.log(x);     // 'outer' — own scope empty, walks up chain
+  }
+
+  inner();   // 'inner'
+  middle();  // 'outer'
+}
+```
+
+**Practical patterns**
+
+```js
+// Factory — each call produces an independent closure
+function makeMultiplier(factor) {
+  return (n) => n * factor;   // factor is closed over
+}
+
+const double = makeMultiplier(2);
+const triple = makeMultiplier(3);
+double(5); // 10 — its own factor=2
+triple(5); // 15 — independent factor=3
+
+// Memoization — cache results in a closed-over Map
+function memoize(fn) {
+  const cache = new Map();
+  return function (...args) {
+    const key = JSON.stringify(args);
+    if (!cache.has(key)) cache.set(key, fn(...args));
+    return cache.get(key);
+  };
+}
+
+// Partial application
+function partial(fn, ...presetArgs) {
+  return (...laterArgs) => fn(...presetArgs, ...laterArgs);
+}
+const add = (a, b) => a + b;
+const add5 = partial(add, 5);
+add5(3); // 8
+```
+
+**The classic loop bug — and how to fix it**
+
+```js
+// Bug: all callbacks close over the same `i` variable
+for (var i = 0; i < 3; i++) {
+  setTimeout(() => console.log(i), 100);
+}
+// Prints: 3, 3, 3  (var is function-scoped, one shared binding)
+
+// Fix 1: use let (block-scoped — new binding per iteration)
+for (let i = 0; i < 3; i++) {
+  setTimeout(() => console.log(i), 100);
+}
+// Prints: 0, 1, 2
+
+// Fix 2: IIFE to capture i by value (pre-ES6)
+for (var i = 0; i < 3; i++) {
+  ((j) => setTimeout(() => console.log(j), 100))(i);
+}
+```
+
+**`let` and `const` create block scope**
+
+```js
+{
+  let blockScoped = 'only here';
+  const alsoBlock = 'same';
+}
+// blockScoped and alsoBlock are inaccessible here
+
+// var leaks out of blocks (but not functions)
+{
+  var leaked = 'oops';
+}
+console.log(leaked); // 'oops'
+```
+</Level>
+
+<Level show="long">
+**Lexical environments — how the spec models closures**
+
+Every execution context has a **Lexical Environment** — a record of bindings (variable → value) plus a reference to the outer Lexical Environment. When a function is created, it captures a reference to the current Lexical Environment as its `[[Environment]]` internal slot.
+
+When you reference a variable, the engine:
+1. Looks in the current Lexical Environment's record
+2. If not found, follows the `outer` reference
+3. Repeats until the global environment (outer = null)
+
+```js
+// The reference is live — not a snapshot
+function makeAdder(base) {
+  let bonus = 0;
+  return {
+    add: (n) => base + n + bonus,
+    addBonus: (n) => { bonus += n; },
+  };
+}
+
+const adder = makeAdder(10);
+adder.add(5);      // 15
+adder.addBonus(3);
+adder.add(5);      // 18  — both methods share the same bonus binding
+```
+
+**Memory implications**
+
+Closures prevent garbage collection of any variable in their captured scope:
+
+```js
+function createLeak() {
+  const bigData = new Array(1_000_000).fill('x');  // 1M strings
+  return () => bigData[0];   // bigData can't be GC'd while fn is alive
+}
+
+const fn = createLeak();
+// bigData stays in memory until fn is eligible for GC
+
+// Fix: capture only what you need
+function noLeak() {
+  const bigData = new Array(1_000_000).fill('x');
+  const first = bigData[0];   // extract what you need
+  return () => first;         // bigData can be GC'd now
+}
+```
+
+**Module pattern — private state without classes**
+
+```js
+const counter = (() => {
+  let _count = 0;              // private — not accessible from outside
+
+  return {
+    increment() { _count++; },
+    decrement() { _count--; },
+    value()     { return _count; },
+    reset()     { _count = 0; },
+  };
+})();
+
+counter.increment();
+counter.increment();
+counter.value();  // 2
+counter._count;   // undefined — truly private
+```
+
+**WeakMap-based private fields** (pre-`#` syntax)
+
+```js
+const _data = new WeakMap();
+
+class SecureBox {
+  constructor(secret) {
+    _data.set(this, { secret });
+  }
+  reveal() {
+    return _data.get(this).secret;
+  }
+}
+
+const box = new SecureBox('classified');
+box.reveal();       // 'classified'
+box.secret;         // undefined
+_data.get(box);     // only accessible in this module scope
+```
+
+WeakMap keys are weakly held — when the instance is GC'd, its private data is too. Native `#privateField` syntax is now standard and preferred.
+
+**Hoisting — var, let, const, function**
+
+```js
+console.log(x);    // undefined (hoisted declaration, not value)
+var x = 5;
+
+console.log(y);    // ReferenceError: Cannot access 'y' before initialization
+let y = 5;         // let/const are in Temporal Dead Zone until declaration
+
+greet();           // works — function declarations are fully hoisted
+function greet() { console.log('hello'); }
+
+sayBye();          // TypeError: sayBye is not a function
+var sayBye = () => console.log('bye');  // var hoisted as undefined
+```
+</Level>

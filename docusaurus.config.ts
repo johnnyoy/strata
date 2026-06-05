@@ -30,6 +30,19 @@ const config: Config = {
     locales: ['en'],
   },
 
+  themes: [
+    [
+      require.resolve('@easyops-cn/docusaurus-search-local'),
+      {
+        hashed: true,
+        language: ['en'],
+        indexBlog: false,
+        docsRouteBasePath: 'docs',
+        highlightSearchTermsOnTargetPage: true,
+      } satisfies import('@easyops-cn/docusaurus-search-local').PluginOptions,
+    ],
+  ],
+
   presets: [
     [
       'classic',
