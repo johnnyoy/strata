@@ -1,0 +1,209 @@
+---
+title: Dockerfile
+sidebar_label: Dockerfile
+sidebar_position: 4
+tutorials:
+  - label: "Dockerfile reference"
+    url: https://docs.docker.com/reference/dockerfile/
+  - label: "Best practices for writing Dockerfiles"
+    url: https://docs.docker.com/build/building/best-practices/
+  - label: "BuildKit documentation"
+    url: https://docs.docker.com/build/buildkit/
+---
+
+# Dockerfile
+
+<Level show="short">
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+CMD ["node", "dist/index.js"]
+```
+
+Key rules: put rarely-changing layers first (base image, deps) and frequently-changing layers last (source code) to maximize cache hits.
+</Level>
+
+<Level show="medium">
+**Core instructions**
+
+```dockerfile
+FROM node:20-alpine AS base      # base image; AS names the stage
+
+WORKDIR /app                     # creates dir + sets it as cwd
+
+COPY package*.json ./            # copy specific files
+COPY --chown=node:node src/ ./src/  # copy with ownership
+
+RUN npm ci --omit=dev            # run during build; creates a layer
+RUN apt-get update && \
+    apt-get install -y curl && \
+    rm -rf /var/lib/apt/lists/*  # clean apt cache in same layer
+
+ENV NODE_ENV=production          # build-time + runtime env var
+ARG BUILD_VERSION                # build-time only (not in final image)
+RUN echo "Building $BUILD_VERSION"
+
+EXPOSE 3000                      # documents the port (doesn't publish it)
+
+CMD ["node", "dist/index.js"]    # default command (overridable at run)
+ENTRYPOINT ["node"]              # fixed executable; CMD becomes its args
+```
+
+**Layer caching — order matters**
+
+```dockerfile
+# Bad: source copy before npm install — any file change busts dep cache
+COPY . .
+RUN npm ci
+
+# Good: copy only manifests first, then source
+COPY package*.json ./
+RUN npm ci          # cached unless package*.json changed
+COPY . .            # only this layer re-runs on source changes
+RUN npm run build
+```
+
+**Multi-stage builds — keep images small**
+
+```dockerfile
+# Stage 1: build
+FROM node:20 AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Stage 2: runtime — only what's needed
+FROM node:20-alpine AS runtime
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+USER node                        # don't run as root
+EXPOSE 3000
+CMD ["node", "dist/index.js"]
+```
+
+Build a specific stage: `docker build --target builder .`
+
+**`.dockerignore`**
+
+```
+node_modules
+.git
+.env
+*.log
+dist
+coverage
+```
+
+Without `.dockerignore`, `COPY . .` sends the entire build context (including `node_modules`) to the Docker daemon — slow and often wrong.
+
+**`HEALTHCHECK`**
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+```
+</Level>
+
+<Level show="long">
+**BuildKit — faster, richer builds**
+
+BuildKit is the default builder since Docker 23. Enable for older versions:
+
+```bash
+DOCKER_BUILDKIT=1 docker build .
+# or permanently:
+docker buildx use default
+```
+
+**Cache mounts** — persist build cache between builds without creating layers:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM python:3.12
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+
+FROM node:20
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+```
+
+**Secret mounts** — expose secrets at build time without baking them in:
+
+```dockerfile
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc \
+    npm ci
+```
+
+```bash
+docker build --secret id=npmrc,src=$HOME/.npmrc .
+```
+
+**Bind mounts in RUN** — access host files without COPY:
+
+```dockerfile
+RUN --mount=type=bind,source=.,target=/src,readonly \
+    cp -r /src/config ./config
+```
+
+**`CMD` vs `ENTRYPOINT` — exec vs shell form**
+
+```dockerfile
+# Shell form — runs via /bin/sh -c; PID 1 is sh, not your process
+CMD node dist/index.js
+
+# Exec form — process IS PID 1; receives signals correctly
+CMD ["node", "dist/index.js"]
+ENTRYPOINT ["node"]
+CMD ["dist/index.js"]   # combined: node dist/index.js; CMD is overridable
+```
+
+With exec form, `docker stop` sends SIGTERM directly to your process. With shell form, sh gets the signal and may not forward it, causing a 10-second timeout before SIGKILL.
+
+**Distroless images — minimal attack surface**
+
+```dockerfile
+FROM golang:1.22 AS builder
+WORKDIR /app
+COPY . .
+RUN CGO_ENABLED=0 go build -o /server ./cmd/server
+
+FROM gcr.io/distroless/static-debian12
+COPY --from=builder /server /server
+ENTRYPOINT ["/server"]
+```
+
+Distroless images contain only the runtime (libc for dynamic binaries, or nothing for static binaries). No shell, no package manager, no `cat` or `ls` — dramatically smaller attack surface.
+
+**OCI image labels and metadata**
+
+```dockerfile
+LABEL org.opencontainers.image.title="My App"
+LABEL org.opencontainers.image.version="1.2.3"
+LABEL org.opencontainers.image.source="https://github.com/org/repo"
+LABEL org.opencontainers.image.created="2025-01-15T00:00:00Z"
+```
+
+Standard OCI annotations are understood by registries (Quay, GHCR, Docker Hub) for display and policy enforcement.
+
+**Build arguments for multi-environment images**
+
+```dockerfile
+ARG BASE_IMAGE=node:20-alpine
+FROM ${BASE_IMAGE}
+
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}  # promote ARG to ENV for runtime access
+```
+
+```bash
+docker build --build-arg BASE_IMAGE=node:22-alpine --build-arg APP_VERSION=1.2.3 .
+```
+</Level>

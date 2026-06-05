@@ -1,0 +1,168 @@
+---
+title: Undoing Changes
+sidebar_label: Undoing
+sidebar_position: 4
+tutorials:
+  - label: "Git reset documentation"
+    url: https://git-scm.com/docs/git-reset
+  - label: "Undoing things in Git"
+    url: https://git-scm.com/book/en/v2/Git-Basics-Undoing-Things
+  - label: "git reflog"
+    url: https://git-scm.com/docs/git-reflog
+---
+
+# Undoing Changes
+
+<Level show="short">
+```bash
+git restore file.txt            # discard working tree changes
+git restore --staged file.txt   # unstage (keep working tree changes)
+git commit --amend              # edit last commit message or add files
+git reset HEAD~1                # undo last commit, keep changes staged
+git revert abc1234              # create new commit that undoes abc1234
+```
+</Level>
+
+<Level show="medium">
+**Discarding working tree changes**
+
+```bash
+git restore file.txt            # discard uncommitted changes to file
+git restore .                   # discard all uncommitted changes
+git restore --source HEAD~2 file.txt  # restore file to 2 commits ago
+git clean -fd                   # delete untracked files and dirs (careful!)
+git clean -n                    # dry run — show what clean would delete
+```
+
+**Unstaging**
+
+```bash
+git restore --staged file.txt   # unstage file, keep working tree change
+git restore --staged .          # unstage everything
+```
+
+**Amending the last commit**
+
+```bash
+git add forgotten-file.txt
+git commit --amend              # opens editor to change message too
+git commit --amend --no-edit    # keep message, just add staged changes
+
+# Only safe before pushing — amend rewrites the commit hash
+```
+
+**`git reset` — move HEAD (and optionally the index/working tree)**
+
+```bash
+git reset --soft  HEAD~1   # undo commit; changes stay staged
+git reset --mixed HEAD~1   # undo commit; changes unstaged (default)
+git reset --hard  HEAD~1   # undo commit; discard all changes (destructive)
+
+git reset HEAD~3           # squash last 3 commits into working tree changes
+```
+
+**`git revert` — safe undo (creates a new commit)**
+
+```bash
+git revert abc1234          # creates inverse commit (safe for shared branches)
+git revert HEAD             # revert last commit
+git revert HEAD~3..HEAD     # revert a range of commits
+git revert --no-commit abc1234  # stage the reversal without committing
+```
+
+Use `revert` on `main` / shared branches. Use `reset` only on private branches.
+
+**Recovering with reflog**
+
+```bash
+git reflog                  # full history of where HEAD has been
+git reflog show branch-name
+
+# After an accidental reset --hard:
+git reset --hard HEAD@{2}   # go back to where HEAD was 2 moves ago
+git checkout -b recover HEAD@{5}  # create branch at old position
+```
+</Level>
+
+<Level show="long">
+**How reset moves the three trees**
+
+Git has three "trees" (snapshots of content):
+
+| Tree | What it is | Reset flag that stops here |
+|------|-----------|--------------------------|
+| HEAD | Last commit snapshot | `--soft` |
+| Index (staging area) | Proposed next commit | `--mixed` (default) |
+| Working tree | Files on disk | `--hard` |
+
+`git reset --soft HEAD~1` — moves HEAD back one commit; index and working tree unchanged (everything appears staged).
+
+`git reset --mixed HEAD~1` — moves HEAD + clears index; working tree unchanged (changes appear unstaged).
+
+`git reset --hard HEAD~1` — moves HEAD + clears index + reverts working tree (changes gone).
+
+**Reflog internals**
+
+Reflog entries live in `.git/logs/`. Every time HEAD moves (checkout, commit, reset, rebase, merge), an entry is appended:
+
+```
+abc1234 def5678 User Name <email> 1700000000 +0000  commit: add feature
+def5678 ghi9012 User Name <email> 1700000001 +0000  reset: moving to HEAD~1
+```
+
+Reflog expires (default 90 days for reachable, 30 days for unreachable). Objects themselves are kept until `git gc` prunes them.
+
+**`git bisect` — find the commit that introduced a bug**
+
+```bash
+git bisect start
+git bisect bad                  # current commit is broken
+git bisect good v1.0.0          # this tag was working
+
+# Git checks out the midpoint — test it, then:
+git bisect good                 # or: git bisect bad
+# Git narrows down in O(log n) steps until it finds the culprit
+
+git bisect reset               # return to original HEAD when done
+
+# Automate with a test script
+git bisect run ./run-tests.sh  # git bisect good/bad automatically
+```
+
+**`git revert` vs `git reset` on shared branches**
+
+```
+Before revert:      A - B - C (HEAD, origin/main)
+After git revert C: A - B - C - C' (HEAD)
+                    ^ C' undoes C's changes; history preserved
+
+Before reset:       A - B - C (HEAD, origin/main)
+After git reset B:  A - B (HEAD)
+                    ^ C is gone from history; pushing requires --force
+                    ^ Anyone else who has C is now diverged
+```
+
+**Recovering a deleted branch**
+
+```bash
+# Find the tip commit of the deleted branch in reflog
+git reflog | grep 'checkout: moving from deleted-branch'
+# or
+git fsck --lost-found   # lists dangling commits
+
+git checkout -b restored-branch <sha>
+```
+
+**Interactive rebase for complex rewrites**
+
+```bash
+git rebase -i HEAD~5   # rewrite last 5 commits
+# Commands in editor:
+# pick   — keep commit as-is
+# reword — keep but edit message
+# edit   — pause to amend
+# squash — merge into previous commit
+# fixup  — like squash, discard message
+# drop   — delete commit entirely
+```
+</Level>

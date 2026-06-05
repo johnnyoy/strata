@@ -1,0 +1,235 @@
+---
+title: Docker Compose
+sidebar_label: Compose
+sidebar_position: 3
+tutorials:
+  - label: "Compose documentation"
+    url: https://docs.docker.com/compose/
+  - label: "Compose file reference"
+    url: https://docs.docker.com/reference/compose-file/
+---
+
+# Docker Compose
+
+<Level show="short">
+Compose defines multi-container apps in a single YAML file.
+
+```bash
+docker compose up -d      # start all services in background
+docker compose down       # stop and remove containers
+docker compose logs -f    # follow logs from all services
+docker compose exec web sh  # open shell in running container
+```
+
+```yaml
+services:
+  web:
+    image: nginx
+    ports: ["8080:80"]
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: secret
+```
+</Level>
+
+<Level show="medium">
+**Full service definition**
+
+```yaml
+# docker-compose.yml
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://user:pass@db:5432/myapp
+    env_file: .env          # load from file (overrides environment)
+    depends_on:
+      db:
+        condition: service_healthy   # wait for health check to pass
+    volumes:
+      - ./src:/app/src      # bind mount for development
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # named volume for persistence
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: myapp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d myapp"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:           # named volume — persists between `down` and `up`
+```
+
+**Key commands**
+
+```bash
+docker compose up              # start (foreground, shows logs)
+docker compose up -d           # start detached
+docker compose up --build      # rebuild images before starting
+docker compose down            # stop + remove containers and networks
+docker compose down -v         # also remove named volumes (data lost!)
+docker compose restart api     # restart one service
+docker compose stop db         # stop without removing
+
+docker compose logs            # all logs
+docker compose logs -f api     # follow one service
+docker compose exec api sh     # shell in running container
+docker compose run api npm test  # one-off command (new container)
+
+docker compose ps              # service status
+docker compose top             # processes inside containers
+```
+
+**Override files**
+
+`docker-compose.override.yml` is auto-merged with `docker-compose.yml` when you run `docker compose up` — useful for dev-specific settings:
+
+```yaml
+# docker-compose.override.yml  (development only — don't commit secrets)
+services:
+  api:
+    build:
+      target: development      # use dev stage of multi-stage Dockerfile
+    volumes:
+      - .:/app                 # full bind mount for hot reload
+    environment:
+      DEBUG: "true"
+    command: npm run dev
+```
+
+Explicit file selection:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+```
+</Level>
+
+<Level show="long">
+**Compose profiles — optional services**
+
+```yaml
+services:
+  api:
+    image: myapp
+  db:
+    image: postgres:16
+  adminer:
+    image: adminer
+    profiles: [tools]      # only starts when profile is active
+  redis-insight:
+    image: redislabs/redisinsight
+    profiles: [tools]
+
+networks:
+  default: {}
+```
+
+```bash
+docker compose --profile tools up   # start everything including tools
+docker compose up                   # start only api + db
+```
+
+**Network aliases**
+
+```yaml
+services:
+  api:
+    networks:
+      backend:
+        aliases:
+          - api.internal   # accessible as both "api" and "api.internal"
+  proxy:
+    networks:
+      - frontend
+      - backend            # bridge between two networks
+
+networks:
+  frontend:
+  backend:
+    internal: true         # no external access
+```
+
+**`docker compose watch`** (Compose 2.22+, Compose Watch)
+
+```yaml
+services:
+  api:
+    build: .
+    develop:
+      watch:
+        - action: sync       # copy changed files into container
+          path: ./src
+          target: /app/src
+        - action: rebuild    # full rebuild on config changes
+          path: package.json
+```
+
+```bash
+docker compose watch   # hot reload without bind mounts
+```
+
+**Extending and merging services**
+
+```yaml
+# base.yml
+x-common: &common-config
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  api:
+    <<: *common-config
+    image: myapp-api
+
+  worker:
+    <<: *common-config
+    image: myapp-worker
+```
+
+**Secrets in Compose**
+
+```yaml
+services:
+  api:
+    secrets:
+      - db_password
+    environment:
+      DB_PASSWORD_FILE: /run/secrets/db_password
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt   # dev: file on disk
+    # environment: DB_PASSWORD        # or: from env var
+```
+
+**Resource limits**
+
+```yaml
+services:
+  api:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          memory: 256M
+```
+</Level>

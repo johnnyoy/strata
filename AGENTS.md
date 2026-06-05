@@ -31,6 +31,40 @@ There are no other tests. The build is the test suite.
 
 ---
 
+## Git workflow
+
+### Commit author
+
+Commits must be authored as `Claude <noreply@anthropic.com>` or they show as "Unverified" on GitHub. Set this **before** the first commit in any session:
+
+```bash
+git config user.email noreply@anthropic.com
+git config user.name Claude
+```
+
+If a commit slips through with the wrong author, amend and push to a **new branch** (force-pushing an already-pushed branch is blocked in auto mode):
+
+```bash
+git config user.email noreply@anthropic.com && git config user.name Claude
+git commit --amend --no-edit --reset-author
+git checkout -b feat/descriptive-name
+git push -u origin feat/descriptive-name
+```
+
+### Branch naming
+
+Use descriptive feature branch names, not session IDs:
+- `feat/expand-topics-and-search` ✓
+- `claude/strata-documentation-app-ENYV1` ✗
+
+The remote maps all pushes to `main`, so the branch name only matters for PR readability.
+
+### Search plugin
+
+`@easyops-cn/docusaurus-search-local` is installed and configured in `docusaurus.config.ts` under `themes`. It generates a static search index at build time — no external service required. Works on GitHub Pages out of the box.
+
+---
+
 ## Architecture
 
 ### Depth system
@@ -178,19 +212,27 @@ In `themeConfig.footer.links`, under the `'Topics'` column:
 
 ## Current topic positions
 
-| Topic | `_category_.json` position | Slug |
-|-------|---------------------------|------|
-| Git | 1 | `/git` |
-| Docker | 2 | `/docker` |
-| Linux | 3 | `/linux` |
-| JavaScript | 4 | `/javascript` |
-| SQL | 5 | `/sql` |
-| Kubectl | 6 | `/kubectl` |
-| AKS | 7 | `/aks` |
-| Flux | 8 | `/flux` |
-| CLI Commands | 9 | `/cli` |
+| Pos | Topic | Slug | Pages |
+|-----|-------|------|-------|
+| 1 | Git | `/git` | branching, commits, remotes, undoing |
+| 2 | Docker | `/docker` | basics, networking, compose, dockerfile |
+| 3 | Linux | `/linux` | — |
+| 4 | JavaScript | `/javascript` | async, closures, modules |
+| 5 | SQL | `/sql` | queries, schema, indexes |
+| 6 | Kubectl | `/kubectl` | — |
+| 7 | AKS | `/aks` | — |
+| 8 | Flux | `/flux` | — |
+| 9 | CLI Commands | `/cli` | — |
+| 10 | Terraform | `/terraform` | basics, state, modules |
+| 11 | Python | `/python` | fundamentals, data-structures, async |
+| 12 | GitHub Actions | `/github-actions` | basics, jobs-and-steps, reusable-workflows |
+| 13 | Helm | `/helm` | basics, templating |
+| 14 | TypeScript | `/typescript` | types, generics, patterns |
+| 15 | Go | `/go` | basics, concurrency, cli-and-http |
+| 16 | Bash | `/bash` | scripting, text-processing, automation |
+| 17 | OpenTelemetry | `/opentelemetry` | concepts, instrumentation, production |
 
-New topics start at position 10.
+New topics start at position 18. Aim for 3–4 content pages per topic (plus cheat-sheet at position 99).
 
 ---
 

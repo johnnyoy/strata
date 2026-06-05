@@ -1,0 +1,208 @@
+---
+title: Indexes
+sidebar_label: Indexes
+sidebar_position: 3
+tutorials:
+  - label: "PostgreSQL indexes"
+    url: https://www.postgresql.org/docs/current/indexes.html
+  - label: "Use the index, Luke"
+    url: https://use-the-index-luke.com/
+  - label: "EXPLAIN documentation"
+    url: https://www.postgresql.org/docs/current/sql-explain.html
+---
+
+# Indexes
+
+<Level show="short">
+```sql
+-- Create a standard B-tree index
+CREATE INDEX idx_users_email ON users (email);
+
+-- Unique index (enforces uniqueness + speeds lookups)
+CREATE UNIQUE INDEX idx_orders_code ON orders (code);
+
+-- See if a query uses an index
+EXPLAIN SELECT * FROM users WHERE email = 'alice@example.com';
+```
+
+Drop with: `DROP INDEX idx_users_email;`
+</Level>
+
+<Level show="medium">
+**When PostgreSQL uses an index**
+
+```sql
+EXPLAIN ANALYZE SELECT * FROM users WHERE email = 'alice@example.com';
+-- Index Scan using idx_users_email on users  (rows=1, actual time=0.05ms)
+
+EXPLAIN ANALYZE SELECT * FROM users;
+-- Seq Scan on users  (rows=1000000)
+-- Full scan is faster when selecting most/all rows — don't over-index
+```
+
+**B-tree index (default)**
+
+Handles: `=`, `<`, `>`, `<=`, `>=`, `BETWEEN`, `IN`, `IS NULL`, `LIKE 'prefix%'`
+
+```sql
+CREATE INDEX idx_orders_created ON orders (created_at);
+CREATE INDEX idx_orders_status  ON orders (status);
+
+-- Multi-column: order matters — leftmost prefix rule
+CREATE INDEX idx_orders_status_created ON orders (status, created_at);
+-- Used for: WHERE status = '...' AND created_at > '...'
+-- NOT used for: WHERE created_at > '...' alone (status not first)
+```
+
+**Partial index — index a subset of rows**
+
+```sql
+-- Index only active users (smaller index, faster updates for inactive rows)
+CREATE INDEX idx_users_active_email ON users (email) WHERE active = TRUE;
+
+-- Index only pending orders
+CREATE INDEX idx_orders_pending ON orders (created_at) WHERE status = 'pending';
+
+-- Query must match the WHERE clause to use the partial index
+SELECT * FROM users WHERE active = TRUE AND email = 'alice@example.com';
+```
+
+**Covering index — include extra columns**
+
+```sql
+-- Without INCLUDE: index lookup + heap fetch for each row
+CREATE INDEX idx_orders_user ON orders (user_id);
+
+-- With INCLUDE: query satisfied from index alone (index-only scan)
+CREATE INDEX idx_orders_user_cover ON orders (user_id) INCLUDE (status, amount);
+
+-- Query can be served without touching the heap:
+SELECT status, amount FROM orders WHERE user_id = 42;
+```
+
+**Expression index — index a computed value**
+
+```sql
+-- Case-insensitive email lookup
+CREATE INDEX idx_users_email_lower ON users (lower(email));
+
+-- Query must use the same expression
+SELECT * FROM users WHERE lower(email) = lower('Alice@Example.com');
+
+-- Index on extracted JSONB field
+CREATE INDEX idx_events_type ON events ((payload->>'type'));
+```
+
+**Checking index usage**
+
+```sql
+-- See all indexes on a table
+SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'orders';
+
+-- Check if indexes are being used (pg_stat_user_indexes)
+SELECT
+  indexrelname,
+  idx_scan,        -- times this index was used
+  idx_tup_read,    -- tuples read via index
+  idx_tup_fetch    -- tuples fetched from heap
+FROM pg_stat_user_indexes
+WHERE relname = 'orders'
+ORDER BY idx_scan DESC;
+```
+</Level>
+
+<Level show="long">
+**B-tree internals**
+
+A B-tree index is a balanced tree of pages (8 KB each by default):
+- **Root page** → **branch pages** → **leaf pages**
+- Leaf pages contain (indexed-value, heap TID) pairs, sorted by value
+- Leaf pages are doubly-linked — range scans traverse them sequentially
+
+For equality on a 1M-row table, B-tree finds the row in O(log n) ≈ 3-4 page reads vs O(n) for a seq scan.
+
+**GiST and GIN indexes**
+
+```sql
+-- GiST — for geometric types, full-text, and range types
+CREATE INDEX idx_locations_point ON locations USING GIST (coords);
+-- Supports: <<, &<, &&, @>, <@, etc. (geometric operators)
+
+-- Full-text search with GiST
+CREATE INDEX idx_docs_fts ON documents USING GIST (to_tsvector('english', body));
+
+-- GIN — for multi-valued types (arrays, JSONB, tsvector)
+-- Better for reads; slower for writes than GiST
+CREATE INDEX idx_tags ON posts USING GIN (tags);
+SELECT * FROM posts WHERE tags @> ARRAY['go', 'kubernetes'];
+
+CREATE INDEX idx_payload ON events USING GIN (payload jsonb_path_ops);
+SELECT * FROM events WHERE payload @> '{"type": "login"}';
+```
+
+| Index type | Best for | Operators |
+|------------|---------|-----------|
+| B-tree | Scalars, ranges, sorting | `=`, `<`, `>`, `LIKE 'x%'` |
+| Hash | Equality only (rarely better than B-tree) | `=` |
+| GiST | Geometry, ranges, full-text | `&&`, `@>`, `<@` |
+| GIN | Arrays, JSONB, tsvector (high selectivity) | `@>`, `@@` |
+| BRIN | Very large, physically sorted tables | Range min/max |
+
+**Index bloat and maintenance**
+
+Deleted or updated rows leave dead tuples in both the heap and the index. VACUUM reclaims heap space but index bloat accumulates over time.
+
+```sql
+-- Check index bloat (requires pgstattuple extension)
+SELECT * FROM pgstattuple('idx_orders_created');
+
+-- Rebuild a bloated index (locks table briefly)
+REINDEX INDEX idx_orders_created;
+
+-- Rebuild without locking (PostgreSQL 12+)
+REINDEX INDEX CONCURRENTLY idx_orders_created;
+
+-- Or just create a new index then drop the old one:
+CREATE INDEX CONCURRENTLY idx_orders_created_new ON orders (created_at);
+DROP INDEX idx_orders_created;
+ALTER INDEX idx_orders_created_new RENAME TO idx_orders_created;
+```
+
+**HOT updates — when indexes aren't needed**
+
+Heap Only Tuple (HOT) updates avoid index writes when:
+1. The update doesn't change any indexed column
+2. The new tuple fits on the same heap page
+
+For frequently-updated columns, consider whether indexing them causes unnecessary index maintenance.
+
+**Cardinality and planner statistics**
+
+The query planner uses statistics collected by `ANALYZE` to estimate row counts and choose plans:
+
+```sql
+ANALYZE users;                         -- update statistics for table
+ANALYZE VERBOSE users;                 -- with row count output
+
+-- Check current statistics
+SELECT attname, n_distinct, correlation
+FROM pg_stats
+WHERE tablename = 'orders';
+-- n_distinct: -0.3 means ~30% of rows are distinct (negative = fraction)
+-- correlation: 1.0 = physically sorted by this column (B-tree scans are fast)
+```
+
+If `n_distinct` is wrong (planner makes bad estimates), increase the statistics target:
+
+```sql
+ALTER TABLE orders ALTER COLUMN status SET STATISTICS 500;  -- default is 100
+ANALYZE orders;
+```
+
+**When NOT to add an index**
+
+- Table has fewer than ~1,000 rows — seq scan is faster
+- Column has very low cardinality (e.g., boolean, 2–3 distinct values) — seq scan wins when >5% of rows match
+- Column is write-heavy and rarely queried — index maintenance overhead exceeds benefit
+- Query already uses a better index on the same table
+</Level>
